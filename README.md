@@ -146,10 +146,49 @@ Biology 3/4 also gets extra error-log categories — terminology, process/mechan
 design, data interpretation, command word, genetics, cell biology, immunity and so on — on top of
 the generic Science ones. These appear for Biology at 3/4 level and nowhere else.
 
+### Your material, and the library
+
+Retain can hold your own study material — the VCAA study design, past papers,
+class notes — under **Library → Materials**. It stores the extracted text, splits
+it into passages and indexes them with SQLite's full-text search.
+
+When you then ask for notes or a practice question, the relevant passages are
+retrieved and put in front of the model as authoritative context, and the
+excerpts used are shown underneath the answer. That turns "write me notes on
+protein synthesis" from a recollection of VCE Biology into something written
+from your actual documents.
+
+It's keyword search, not semantic search. There are no embeddings and no vector
+database, because both would mean either a network round trip per query or a
+model file several times the size of the app. Ask about "protein synthesis" and
+it finds pages containing those words; ask about "how cells make things" and it
+may not. **Check coverage** on the same screen tells you what would be retrieved
+before you spend a request finding out.
+
+PDFs have to be pasted rather than dropped — the webview has no PDF parser, and
+accepting the file only to store nothing would be worse than saying so.
+
+Everything the AI writes is kept automatically under **Library → Saved**: notes,
+practice questions, weekly reviews. Each item records what was asked, which
+model wrote it and when, and can be exported as Markdown or printed. There is no
+save button, because a save button you have to remember is a feature that mostly
+doesn't happen.
+
 ### Updates
 
-Retain checks GitHub Releases about once a day, in the background, and tells you if a newer version
-exists. There's also a **Check now** button in Settings.
+Retain checks [GitHub Releases](https://github.com/ArmanKundu/retain/releases) about once a day, in
+the background, and tells you if a newer version exists. There's also a **Check now** button in
+Settings.
+
+To publish a new version, from a clean checkout:
+
+```bash
+./scripts/release.sh 0.3.0
+```
+
+That bumps the version in the three files that carry it, runs the tests, tags and pushes. GitHub
+Actions builds the DMG on a macOS runner and attaches it to the release. Anyone running Retain sees
+the update within a day and downloads the DMG themselves — no Rust toolchain needed to receive one.
 
 It downloads nothing and installs nothing. That's deliberate: the app is ad-hoc signed, so a
 program that silently replaced its own bundle would be indistinguishable from something malicious

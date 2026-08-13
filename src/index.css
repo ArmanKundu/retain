@@ -1,0 +1,434 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Design tokens.
+
+   Dark first, light supported. The palette is deliberately narrow: two greys for
+   surfaces, one for lines, three for text, and a single accent. Subject colours
+   are the only other hues in the app, which is what lets them actually mean
+   something when they show up in the grid.
+   --------------------------------------------------------------------------- */
+
+@theme {
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica,
+    Arial, sans-serif;
+
+  --color-canvas: #0b0b0d;
+  --color-surface: #141417;
+  --color-surface-hi: #1c1c21;
+  --color-line: #2a2a30;
+  --color-line-soft: #202025;
+
+  --color-ink: #f2f2f4;
+  --color-ink-dim: #a1a1aa;
+  --color-ink-faint: #6b6b76;
+
+  --color-accent: #5b8def;
+  --color-accent-hi: #7aa3f5;
+  --color-positive: #4ba97b;
+
+  --radius-card: 14px;
+  --ease-out-soft: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+:root {
+  --canvas: var(--color-canvas);
+  --surface: var(--color-surface);
+  --surface-hi: var(--color-surface-hi);
+  --line: var(--color-line);
+  --line-soft: var(--color-line-soft);
+  --ink: var(--color-ink);
+  --ink-dim: var(--color-ink-dim);
+  --ink-faint: var(--color-ink-faint);
+  --accent: var(--color-accent);
+
+  /* Semantic colours. Kept as tokens rather than literals so light mode can
+     darken them — the dark-mode values wash out on a white background. */
+  --danger: #d65f6e;
+  --warn: #c9784a;
+
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --canvas: #f6f6f7;
+  --surface: #ffffff;
+  --surface-hi: #fbfbfc;
+  --line: #e2e2e6;
+  --line-soft: #ececf0;
+  --ink: #17171a;
+  --ink-dim: #5f5f6b;
+  --ink-faint: #96969f;
+  --accent: #3b6fd4;
+  --danger: #c0394b;
+  --warn: #a55a2c;
+
+  color-scheme: light;
+}
+
+
+/* ---------------------------------------------------------------------------
+   Retain design tokens.
+
+   Deliberately small. The audit that preceded this found eight corner radii,
+   twenty font sizes and no elevation system at all — which is what made the app
+   read as "Tailwind with some glass added" rather than one designed product.
+   Everything below exists to make the *default* choice the consistent one.
+   --------------------------------------------------------------------------- */
+
+:root {
+  /* Geometry. Four steps, and pills. Anything not on this scale is a bug. */
+  --r-sm: 10px;   /* small controls: chips, inputs, icon buttons */
+  --r-md: 14px;   /* buttons, list rows, compact panels */
+  --r-lg: 20px;   /* cards and panels */
+  --r-xl: 26px;   /* floating surfaces: dock, command bar, review card */
+
+  /* Elevation. Two layers each: a tight contact shadow for the object's edge,
+     and a wider ambient one for the space beneath it. One shadow alone reads as
+     blur; two read as an object sitting above a surface. */
+  --e-sm:
+    0 1px 2px rgba(0, 0, 0, 0.06),
+    0 2px 8px rgba(0, 0, 0, 0.05);
+  --e-md:
+    0 2px 4px rgba(0, 0, 0, 0.07),
+    0 8px 24px rgba(0, 0, 0, 0.09);
+  --e-lg:
+    0 4px 8px rgba(0, 0, 0, 0.09),
+    0 16px 48px rgba(0, 0, 0, 0.14);
+
+  /* Motion. Two durations. Anything slower reads as sluggish, anything faster
+     doesn't register as a state change. */
+  --t-fast: 130ms;
+  --t-base: 180ms;
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+
+  /* Glass. Used only on floating things — never on the whole window. */
+  --glass: rgba(28, 28, 33, 0.72);
+  --glass-line: rgba(255, 255, 255, 0.09);
+  --glass-blur: 30px;
+
+  /* The capture bar sits over whatever app you were in, so it's blurrier and
+     more transparent than in-app glass — the wallpaper showing through is what
+     makes it read as a system utility rather than a window. */
+  --spotlight: rgba(30, 30, 34, 0.58);
+  --spotlight-line: rgba(255, 255, 255, 0.14);
+  --spotlight-blur: 48px;
+
+  /* The atmospheric wash behind the app. Almost imperceptible by design: it
+     gives the background depth without ever competing with content. */
+  --wash-a: rgba(91, 141, 239, 0.10);
+  --wash-b: rgba(75, 169, 123, 0.07);
+  --wash-c: rgba(150, 110, 240, 0.06);
+}
+
+:root[data-theme="light"] {
+  /* Light mode shadows carry more black, because a light surface needs a
+     stronger contact edge to separate from a light background. */
+  --e-sm:
+    0 1px 2px rgba(16, 18, 27, 0.05),
+    0 2px 8px rgba(16, 18, 27, 0.05);
+  --e-md:
+    0 2px 4px rgba(16, 18, 27, 0.06),
+    0 8px 24px rgba(16, 18, 27, 0.08);
+  --e-lg:
+    0 4px 8px rgba(16, 18, 27, 0.07),
+    0 16px 48px rgba(16, 18, 27, 0.12);
+
+  --glass: rgba(255, 255, 255, 0.72);
+  --glass-line: rgba(255, 255, 255, 0.55);
+
+  --spotlight: rgba(255, 255, 255, 0.62);
+  --spotlight-line: rgba(255, 255, 255, 0.7);
+
+  --wash-a: rgba(91, 141, 239, 0.10);
+  --wash-b: rgba(75, 169, 123, 0.08);
+  --wash-c: rgba(150, 110, 240, 0.06);
+}
+
+/* ---------------------------------------------------------------------------
+   The application background.
+
+   Three very large, very faint radial gradients over the base colour. At these
+   opacities you cannot point at a colour — you only notice the flatness when
+   it's removed. Fixed attachment so it reads as the space the app sits in
+   rather than something that scrolls with content.
+   --------------------------------------------------------------------------- */
+
+.app-wash {
+  background-color: var(--canvas);
+  background-image:
+    radial-gradient(58% 44% at 14% 4%, var(--wash-a) 0%, transparent 68%),
+    radial-gradient(46% 38% at 92% 12%, var(--wash-b) 0%, transparent 66%),
+    radial-gradient(60% 50% at 62% 98%, var(--wash-c) 0%, transparent 70%);
+  background-attachment: fixed;
+}
+
+/* Surfaces ---------------------------------------------------------------- */
+
+.surface-1 {
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-lg);
+}
+
+.surface-2 {
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-lg);
+  box-shadow: var(--e-sm);
+}
+
+/* Floating glass. Only for things that genuinely hover above the app. */
+.glass {
+  background: var(--glass);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  border: 1px solid var(--glass-line);
+  box-shadow: var(--e-lg);
+}
+
+/* The quick-capture bar.
+
+   Modelled on Spotlight rather than on a dialog: a single soft-edged pill with
+   heavy blur, a hairline that catches light at the top, and no visible chrome.
+   The inner highlight is what stops a translucent surface from looking like a
+   flat grey box. */
+.spotlight {
+  background: var(--spotlight);
+  backdrop-filter: blur(var(--spotlight-blur)) saturate(190%);
+  -webkit-backdrop-filter: blur(var(--spotlight-blur)) saturate(190%);
+  border: 1px solid var(--spotlight-line);
+  box-shadow:
+    0 24px 68px rgba(0, 0, 0, 0.34),
+    0 2px 10px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+/* Interaction ------------------------------------------------------------- */
+
+.pressable {
+  transition:
+    transform var(--t-fast) var(--ease),
+    background-color var(--t-fast) var(--ease),
+    border-color var(--t-fast) var(--ease),
+    box-shadow var(--t-fast) var(--ease),
+    opacity var(--t-fast) var(--ease);
+}
+.pressable:active {
+  transform: scale(0.98);
+}
+
+/* A row that lifts a hair on hover. The translate is 1px on purpose — enough
+   to feel responsive, not enough to shift the layout visually. */
+.lift {
+  transition:
+    transform var(--t-base) var(--ease),
+    background-color var(--t-base) var(--ease),
+    box-shadow var(--t-base) var(--ease);
+}
+.lift:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--e-md);
+}
+
+/* Entrances --------------------------------------------------------------- */
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes pop {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  to   { opacity: 1; transform: none; }
+}
+
+.animate-rise { animation: rise var(--t-base) var(--ease) both; }
+.animate-pop  { animation: pop 220ms var(--ease) both; }
+
+/* Someone who has asked the system to reduce motion means it. Transitions are
+   collapsed rather than removed, so state changes still register. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .lift:hover { transform: none; }
+  .pressable:active { transform: none; }
+}
+
+/* ---------------------------------------------------------------------------
+   Making a web view stop behaving like a web view.
+   --------------------------------------------------------------------------- */
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+html {
+  /* Kills the rubber-band bounce at the top and bottom of the window. A native
+     Mac app's content doesn't slide off its own edges when you scroll past the
+     end, and nothing gives away a web view faster. */
+  overscroll-behavior: none;
+  background: var(--canvas);
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--canvas);
+  color: var(--ink);
+
+  /* Matches how AppKit renders text. Without this, everything is a shade too
+     heavy compared to the rest of the system. */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* Chrome is not a document: you can't select the sidebar of Mail either.
+     Anything the user might legitimately want to copy opts back in with
+     `.selectable` below. */
+  user-select: none;
+  -webkit-user-select: none;
+
+  /* An I-beam over a button is another web-view tell. */
+  cursor: default;
+}
+
+/* Real content — session notes, error-log entries — is selectable. */
+.selectable,
+input,
+textarea {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+input,
+textarea {
+  cursor: auto;
+}
+
+/* Images shouldn't be draggable ghosts. */
+img {
+  -webkit-user-drag: none;
+  user-drag: none;
+}
+
+/* Browser focus rings look nothing like AppKit's. Remove the default, then put a
+   deliberate one back for keyboard users only — `:focus-visible` fires on Tab but
+   not on click, which is exactly the macOS behaviour. */
+*:focus {
+  outline: none;
+}
+
+/* One focus indicator for the whole app, applied globally so an element added
+   later can't be missed. No `border-radius` here on purpose: modern engines
+   draw the outline following the element's own radius, and forcing a value made
+   the ring square off around pills and rounded cards. */
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Text fields are the exception: the caret already says where focus is, and a
+   ring around an input you're typing in reads as an error state. AppKit doesn't
+   draw one either. The field's own border still brightens on focus. */
+input:focus-visible,
+textarea:focus-visible,
+[contenteditable]:focus-visible {
+  outline: none;
+}
+
+/* Overlay scrollbars, like the system's. */
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--ink-faint) 40%, transparent);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--ink-faint) 70%, transparent);
+  background-clip: content-box;
+}
+
+/* The window has `titleBarStyle: Overlay`, so the traffic lights float over our
+   content. This is the drag handle that replaces the title bar we hid. */
+.titlebar-drag {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.titlebar-drag button,
+.titlebar-drag a,
+.titlebar-drag input {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+/* Digits that don't shift width as they count. Essential anywhere a number
+   changes every second, or the whole layout jitters. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* ---------------------------------------------------------------------------
+   Motion. Short, eased, and gone the moment the user asks for less.
+   --------------------------------------------------------------------------- */
+
+.animate-in {
+  animation: rise var(--t-base) var(--ease) both;
+}
+
+
+
+/* ---------------------------------------------------------------------------
+   Printing.
+
+   Only the open library item prints. Without this, ⌘P produces the sidebar, the
+   nav and a dimmed modal backdrop across four pages — which is what makes
+   "print my notes" not actually work in most web-shaped apps.
+   --------------------------------------------------------------------------- */
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .print-target,
+  .print-target * {
+    visibility: visible;
+  }
+
+  .print-target {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    max-height: none !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    color: #000;
+    background: #fff;
+  }
+
+  .print-target pre {
+    white-space: pre-wrap;
+    font-size: 11pt;
+    line-height: 1.6;
+  }
+}

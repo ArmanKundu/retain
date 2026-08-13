@@ -1,0 +1,71 @@
+[package]
+name = "retain"
+version = "0.1.0"
+description = "VCE study tracker"
+authors = ["Arman Kundu"]
+edition = "2021"
+
+[lib]
+# Tauri builds the app logic as a library and links it from a thin binary.
+# The `_lib` suffix avoids a name collision with the binary target.
+name = "retain_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# `tray-icon` is the feature that gives us the macOS menu bar item. It is part of
+# Tauri core, NOT a separate plugin — the menu bar timer needs no extra crate.
+tauri = { version = "2", features = ["tray-icon"] }
+
+# Opens URLs in the user's default browser (release notes, VCAA links).
+tauri-plugin-opener = "2"
+
+# System-wide ⌘⇧Space for quick capture. Registers a hotkey with macOS that
+# fires even when Retain isn't the focused app.
+tauri-plugin-global-shortcut = "2"
+
+# Bridges macOS UNUserNotificationCenter, including the permission request
+# that onboarding screen 3 asks for.
+tauri-plugin-notification = "2"
+
+# SQLite. `bundled` compiles SQLite itself into our binary, so every machine
+# runs a byte-identical engine and there is no system dependency to install.
+# Deliberately NOT tauri-plugin-sql: that plugin is designed for the frontend to
+# send SQL strings and receive untyped JSON, which would push scheduling, streak
+# and analytics logic into TypeScript. We keep all of it in Rust behind typed commands.
+rusqlite = { version = "0.40", features = ["bundled"] }
+
+# macOS Keychain. This is the ONLY place a provider API key is ever persisted.
+#
+# keyring 4 splits its backends into separate crates. The default feature ("v1")
+# pulls in `apple-native-keyring-store/keychain` on macOS, which is the
+# Security.framework backend we want — so plain default features is correct here,
+# and naming a backend feature explicitly is actually a build error.
+keyring = "4"
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["clock", "serde"] }
+
+# Ergonomic error handling. `anyhow::Result` lets any error type bubble up through
+# `?` without hand-writing conversions between them.
+anyhow = "1"
+
+# FSRS-6 spaced repetition. This is the reference implementation from
+# open-spaced-repetition, carrying the published 21-parameter FSRS-6 default
+# weights. Deliberately NOT `rs-fsrs`, which has a single release from Oct 2024
+# predating FSRS-6. We use its scheduler only — the optimizer is out of scope
+# for v1 and we never train weights.
+fsrs = "6"
+
+# HTTP client, used to check an API key against its provider before storing it.
+# `rustls-tls` rather than the default native-TLS: it links no system OpenSSL and
+# behaves identically everywhere, which matters for a binary shipped to other Macs.
+# `json` is for the AI request bodies; `rustls-tls` keeps HTTPS in pure Rust so
+# the build never touches the system OpenSSL. Default features stay off because
+# they would pull in native-tls.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+chrono-tz = "0.10.4"
+iana-time-zone = "0.1.65"

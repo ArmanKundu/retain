@@ -1,0 +1,43 @@
+# Build output
+node_modules
+dist
+dist-ssr
+src-tauri/target
+*.local
+
+# macOS
+.DS_Store
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Editors
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Never commit anything resembling a credential or personal study data.
+# Keys live in the macOS Keychain and the database lives in
+# ~/Library/Application Support — neither should ever appear here, but these
+# patterns make an accident impossible rather than unlikely.
+*.pem
+*.p12
+*.cer
+*.mobileprovision
+.env
+.env.*
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+retain-export*.json

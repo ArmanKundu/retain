@@ -1,0 +1,74 @@
+# Build and publish a DMG when a version tag is pushed.
+#
+# The whole point of this file: `./scripts/release.sh 0.2.0` on any machine
+# produces a downloadable DMG on the releases page, which is what the in-app
+# update check reads. Nobody has to have Rust installed to *receive* an update.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+# Needed to create the release and upload the DMG to it.
+permissions:
+  contents: write
+
+jobs:
+  build:
+    # Apple Silicon runner cross-compiling to Intel. Retain ships x86_64 only so
+    # one build runs everywhere, including under Rosetta on Apple Silicon —
+    # see the README for why there's no universal binary.
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install the Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin
+
+      # Compiling Tauri from scratch takes ~10 minutes; cached it's ~2.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      # A release that fails its own tests should not become a download.
+      - name: Test
+        run: |
+          npm test
+          cd src-tauri && cargo test --lib
+
+      - name: Build the DMG
+        run: npm run tauri:build
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          DMG=$(find src-tauri/target/x86_64-apple-darwin/release/bundle/dmg -name "*.dmg" | head -1)
+          test -n "$DMG"
+
+          gh release create "${GITHUB_REF_NAME}" "$DMG" \
+            --title "Retain ${GITHUB_REF_NAME}" \
+            --generate-notes \
+            --notes "
+          **Installing.** Download the DMG, drag Retain to Applications, then open it.
+
+          Retain is ad-hoc signed rather than signed with a paid Apple Developer ID,
+          so the first launch is blocked. Go to **System Settings → Privacy & Security**,
+          scroll down, and click **Open Anyway**. That button appears for about an hour
+          after a blocked launch attempt. This is once per version, not once per launch.
+
+          Your data is kept and migrated automatically — installing over an existing copy
+          does not reset anything.
+          "

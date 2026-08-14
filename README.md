@@ -174,6 +174,41 @@ model wrote it and when, and can be exported as Markdown or printed. There is no
 save button, because a save button you have to remember is a feature that mostly
 doesn't happen.
 
+### The assistant
+
+A conversation view that answers from **your own material**, with a toggle for
+how far it may stray.
+
+**Strict** is the default and is the point of the feature: it answers from what
+you've uploaded, and when your notes don't cover something it says so rather than
+filling the gap. A model asked about VCE Biology will answer confidently either
+way — the difference is whether you can check it. Switch to **Material + general
+knowledge** and it uses both, labelling which is which.
+
+Every answer shows the passages it used, so a bad retrieval is visible rather
+than silently shaping what you revise from. It can also see what's due, what's
+coming up and this week's hours, so questions about your actual schedule work.
+
+It doesn't *act*. It won't create a card or move an assessment — a model that
+silently writes to your deck is one whose mistakes you inherit. It points you at
+the screen instead.
+
+You can attach files to a single question; those are scoped to that message and
+don't join the searchable library.
+
+### Subject folders
+
+Retain creates `~/Documents/Retain/<Subject>/` for each of your subjects. Drop a
+term's PDFs into the right one, press **Sync** on the Library screen, and they're
+read and indexed — the subject comes from the folder, so there's no per-file
+tagging. Files already read are skipped, so syncing again after adding two PDFs
+costs two files of work.
+
+PDFs are read directly now. A **scanned** PDF has no text layer — its pages are
+images — and that's reported as its own outcome rather than stored as an empty
+document. Word and Pages files are refused with the instruction to export as PDF
+first, rather than half-parsed.
+
 ### Updates
 
 Retain checks [GitHub Releases](https://github.com/ArmanKundu/retain/releases) about once a day, in

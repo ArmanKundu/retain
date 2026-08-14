@@ -102,7 +102,10 @@ pub struct Resource {
 }
 
 /// An excerpt retrieved for a question, with enough provenance to check it.
-#[derive(Debug, Clone, Serialize, PartialEq)]
+///
+/// `Deserialize` because citations are stored as JSON alongside the answer they
+/// grounded, and read back when the conversation is reopened.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Excerpt {
     pub resource_id: i64,
@@ -209,6 +212,31 @@ pub fn word_count(text: &str) -> i64 {
 // ---------------------------------------------------------------------------
 // Storage
 // ---------------------------------------------------------------------------
+
+/// Add a resource that came from a file on disk.
+///
+/// `origin_path` is what makes a folder re-syncable: the next Sync sees the
+/// path is already indexed and skips it rather than storing a second copy.
+#[allow(clippy::too_many_arguments)]
+pub fn add_from_file(
+    conn: &mut Connection,
+    subject_id: Option<i64>,
+    title: &str,
+    kind: ResourceKind,
+    source: Option<&str>,
+    raw: &str,
+    origin_path: Option<&str>,
+    now: DateTime<Utc>,
+) -> Result<i64> {
+    let id = add(conn, subject_id, title, kind, source, raw, now)?;
+    if let Some(path) = origin_path {
+        conn.execute(
+            "UPDATE resources SET origin_path = ?2 WHERE id = ?1",
+            rusqlite::params![id, path],
+        )?;
+    }
+    Ok(id)
+}
 
 pub fn add(
     conn: &mut Connection,

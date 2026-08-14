@@ -27,6 +27,7 @@ const MIGRATIONS: &[(i32, &str)] = &[
     (1, include_str!("db/migrations/001_init.sql")),
     (2, include_str!("db/migrations/002_capture_cards_errors.sql")),
     (3, include_str!("db/migrations/003_library_resources.sql")),
+    (4, include_str!("db/migrations/004_assistant.sql")),
 ];
 
 /// How many automatic snapshots to keep before deleting the oldest.

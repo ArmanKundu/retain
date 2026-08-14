@@ -69,3 +69,5 @@ fsrs = "6"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 chrono-tz = "0.10.4"
 iana-time-zone = "0.1.65"
+tauri-plugin-dialog = "2.7.2"
+pdf-extract = "0.12.0"

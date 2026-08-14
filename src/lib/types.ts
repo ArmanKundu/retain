@@ -624,3 +624,70 @@ export interface LibraryFilter {
   search?: string | null;
   onlyPinned?: boolean | null;
 }
+
+// --- Folders, file import, and the assistant ---------------------------------
+
+export interface SubjectFolder {
+  subjectId: number;
+  subjectName: string;
+  colour: string;
+  path: string;
+  fileCount: number;
+  importedCount: number;
+}
+
+/** What happened to one file during import. */
+export type Outcome =
+  | { status: "extracted"; path: string; name: string; text: string; words: number }
+  /** A PDF whose pages are images — there is no text to extract. */
+  | { status: "scanned"; path: string; name: string }
+  | { status: "unsupported"; path: string; name: string; reason: string }
+  | { status: "failed"; path: string; name: string; reason: string };
+
+export interface ImportedFile {
+  name: string;
+  outcome: Outcome;
+  resourceId: number | null;
+  skippedDuplicate: boolean;
+}
+
+/**
+ * How the assistant may answer.
+ *
+ * `strict` — only from your material; gaps are stated, not filled.
+ * `open`   — your material first, then general knowledge, labelled as such.
+ */
+export type Grounding = "strict" | "open";
+
+export interface Conversation {
+  id: number;
+  subjectId: number | null;
+  subjectName: string | null;
+  colour: string | null;
+  title: string;
+  grounding: Grounding;
+  messageCount: number;
+  updatedAt: string;
+}
+
+export interface MessageAttachment {
+  id: number;
+  name: string;
+  words: number;
+}
+
+export interface ChatMessage {
+  id: number;
+  role: "user" | "assistant";
+  body: string;
+  /** Citations — which passages of your material grounded this answer. */
+  sources: Excerpt[];
+  model: string | null;
+  attachments: MessageAttachment[];
+  createdAt: string;
+}
+
+export interface NewAttachment {
+  name: string;
+  content: string;
+}

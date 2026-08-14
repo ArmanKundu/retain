@@ -8,14 +8,17 @@
 // design is loaded is grounded in the real document, and the excerpts it used
 // are shown so you can check them.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
+  AlertTriangle,
   Download,
   FileText,
+  FolderOpen,
+  FolderSync,
   Pin,
   Printer,
   Search,
-  Sparkle,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -26,10 +29,12 @@ import { Button, Card, Empty, cx } from "../components/ui";
 import { api } from "../lib/api";
 import type {
   GroundedText,
+  ImportedFile,
   LibraryItem,
   LibraryKind,
   Resource,
   ResourceKind,
+  SubjectFolder,
 } from "../lib/types";
 import { useApp } from "../store";
 
@@ -487,12 +492,12 @@ function Materials() {
 }
 
 /**
- * Add material, by file or by pasting.
+ * Add material: subject folders, a folder anywhere, individual files, or paste.
  *
- * Text files are read in the webview and only the text crosses to Rust. PDFs
- * can't be read here — the webview has no PDF parser — so the honest thing is
- * to say so and offer paste, rather than accept the file and silently store
- * nothing.
+ * The folder route is the one that matters. Retain makes
+ * `~/Documents/Retain/<Subject>/` for each of your subjects; drop a term's PDFs
+ * into the right one and press Sync. Everything else is a fallback for material
+ * that doesn't live in a folder.
  */
 function Uploader({
   subjects,
@@ -503,18 +508,97 @@ function Uploader({
   onAdded: () => Promise<void>;
   onError: (e: string | null) => void;
 }) {
-  const fileRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState("");
   const [kind, setKind] = useState<ResourceKind>("study_design");
   const [subjectId, setSubjectId] = useState<number | null>(null);
   const [pasted, setPasted] = useState("");
   const [busy, setBusy] = useState(false);
+  const [folders, setFolders] = useState<SubjectFolder[]>([]);
+  const [report, setReport] = useState<ImportedFile[] | null>(null);
+  const [progress, setProgress] = useState<string | null>(null);
 
-  const commit = async (text: string, source: string | null, fallbackTitle: string) => {
+  const loadFolders = useCallback(async () => {
+    try {
+      setFolders(await api.ensureSubjectFolders());
+    } catch (e) {
+      onError(String(e));
+    }
+  }, [onError]);
+
+  useEffect(() => {
+    void loadFolders();
+  }, [loadFolders]);
+
+  const runImport = async (path: string, forSubject: number | null, label: string) => {
+    setBusy(true);
+    setProgress(`Reading ${label}…`);
+    onError(null);
+    try {
+      const result = await api.importFolder(path, forSubject);
+      setReport(result);
+      await onAdded();
+      await loadFolders();
+    } catch (e) {
+      onError(String(e));
+    } finally {
+      setBusy(false);
+      setProgress(null);
+    }
+  };
+
+  const pickFolder = async () => {
+    const picked = await openDialog({ directory: true, title: "Choose a folder of material" });
+    if (typeof picked === "string") {
+      await runImport(picked, subjectId, "that folder");
+    }
+  };
+
+  const pickFiles = async () => {
+    const picked = await openDialog({
+      multiple: true,
+      title: "Add files",
+      filters: [
+        {
+          name: "Documents",
+          extensions: ["pdf", "txt", "md", "markdown", "csv", "html", "rtf", "json", "tex"],
+        },
+      ],
+    });
+    if (!picked) return;
+
+    setBusy(true);
+    onError(null);
+    const results: ImportedFile[] = [];
+
+    try {
+      for (const path of Array.isArray(picked) ? picked : [picked]) {
+        setProgress(`Reading ${path.split("/").pop()}…`);
+        const outcome = await api.readFileText(path);
+
+        if (outcome.status === "extracted") {
+          const name = outcome.name.replace(/\.[^.]+$/, "");
+          await api.addResource(subjectId, title.trim() || name, kind, outcome.name, outcome.text);
+          results.push({ name: outcome.name, outcome, resourceId: null, skippedDuplicate: false });
+        } else {
+          results.push({ name: outcome.name, outcome, resourceId: null, skippedDuplicate: false });
+        }
+      }
+      setReport(results);
+      setTitle("");
+      await onAdded();
+    } catch (e) {
+      onError(String(e));
+    } finally {
+      setBusy(false);
+      setProgress(null);
+    }
+  };
+
+  const commitPaste = async () => {
     setBusy(true);
     onError(null);
     try {
-      await api.addResource(subjectId, title.trim() || fallbackTitle, kind, source, text);
+      await api.addResource(subjectId, title.trim() || "Pasted material", kind, "pasted", pasted);
       setTitle("");
       setPasted("");
       await onAdded();
@@ -525,88 +609,206 @@ function Uploader({
     }
   };
 
-  const readFiles = async (files: FileList) => {
-    for (const file of Array.from(files)) {
-      if (/\.pdf$/i.test(file.name)) {
-        onError(
-          `${file.name} is a PDF, which Retain can't read directly. Open it, select all, and paste the text below — or export it as .txt first.`,
-        );
-        continue;
-      }
-      const text = await file.text();
-      await commit(text, file.name, file.name.replace(/\.[^.]+$/, ""));
-    }
-  };
+  return (
+    <>
+      {/* The subject folders. */}
+      {folders.length > 0 && (
+        <Card className="mb-3 p-5">
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-[13.5px] font-medium">Your subject folders</h3>
+            <span className="text-[11.5px] text-[var(--ink-faint)]">
+              in Documents › Retain
+            </span>
+          </div>
+          <p className="mt-1.5 text-[12.5px] leading-relaxed text-[var(--ink-dim)]">
+            Drop notes, past papers and the study design into the matching folder, then press
+            Sync. Files already read are skipped, so syncing again is cheap.
+          </p>
+
+          <div className="mt-3.5 space-y-1">
+            {folders.map((f) => {
+              const pending = f.fileCount - f.importedCount;
+              return (
+                <div
+                  key={f.subjectId}
+                  className="group flex items-center gap-3 rounded-[var(--r-md)] px-2 py-2 transition-colors duration-[var(--t-fast)] hover:bg-[var(--surface-hi)]/60"
+                >
+                  <SubjectPill name={f.subjectName} colour={f.colour} dotOnly />
+
+                  <button
+                    onClick={() => void api.revealFolder(f.path).catch(() => {})}
+                    title="Show this folder in Finder"
+                    className="pressable min-w-0 flex-1 text-left"
+                  >
+                    <span className="block truncate text-[13px] text-[var(--ink)]">
+                      {f.subjectName}
+                    </span>
+                    <span className="block text-[11.5px] text-[var(--ink-faint)]">
+                      {f.fileCount === 0
+                        ? "empty — drop files in"
+                        : pending > 0
+                          ? `${pending} new of ${f.fileCount} file${f.fileCount === 1 ? "" : "s"}`
+                          : `${f.fileCount} file${f.fileCount === 1 ? "" : "s"}, all read`}
+                    </span>
+                  </button>
+
+                  <Button
+                    size="sm"
+                    variant={pending > 0 ? "primary" : "ghost"}
+                    disabled={busy || f.fileCount === 0}
+                    onClick={() => void runImport(f.path, f.subjectId, f.subjectName)}
+                  >
+                    <FolderSync size={13} />
+                    Sync
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      <Card className="p-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Title — optional; taken from the filename if blank"
+            className="h-9 min-w-[240px] flex-1 rounded-[var(--r-sm)] border border-[var(--line)] bg-[var(--surface-hi)] px-3 text-[13px] text-[var(--ink)] placeholder:text-[var(--ink-faint)] outline-none focus:border-[var(--accent)]"
+          />
+          <select
+            value={subjectId ?? ""}
+            onChange={(e) => setSubjectId(e.target.value ? Number(e.target.value) : null)}
+            className="h-9 rounded-[var(--r-sm)] border border-[var(--line)] bg-[var(--surface-hi)] px-2.5 text-[12.5px] text-[var(--ink)]"
+          >
+            <option value="">Any subject</option>
+            {subjects.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {RESOURCE_KINDS.map((k) => (
+            <Chip key={k.value} active={kind === k.value} onClick={() => setKind(k.value)} title={k.hint}>
+              {k.label}
+            </Chip>
+          ))}
+        </div>
+
+        <div className="mt-3.5 flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="primary" disabled={busy} onClick={() => void pickFolder()}>
+            <FolderOpen size={13} />
+            Add a folder
+          </Button>
+          <Button size="sm" disabled={busy} onClick={() => void pickFiles()}>
+            <Upload size={13} />
+            Add files
+          </Button>
+          <span className="text-[11.5px] text-[var(--ink-faint)]">
+            PDF, text, Markdown, HTML, RTF, CSV
+          </span>
+        </div>
+
+        {progress && (
+          <p className="mt-2.5 text-[12.5px] text-[var(--ink-dim)]">{progress}</p>
+        )}
+
+        <details className="mt-4 border-t border-[var(--line-soft)] pt-3.5">
+          <summary className="cursor-pointer text-[12.5px] text-[var(--ink-dim)]">
+            Or paste text directly
+          </summary>
+          <textarea
+            value={pasted}
+            onChange={(e) => setPasted(e.target.value)}
+            placeholder="Paste from anywhere — a website, a scanned page you've OCR'd, a message."
+            className="selectable mt-2.5 h-28 w-full resize-none rounded-[var(--r-md)] border border-[var(--line)] bg-[var(--surface-hi)] p-3 text-[12.5px] leading-relaxed text-[var(--ink)] placeholder:text-[var(--ink-faint)] outline-none focus:border-[var(--accent)]"
+          />
+          <Button
+            size="sm"
+            className="mt-2.5"
+            disabled={busy || pasted.trim().length < 40}
+            onClick={() => void commitPaste()}
+          >
+            Add pasted text
+          </Button>
+        </details>
+      </Card>
+
+      {report && <ImportReport report={report} onClose={() => setReport(null)} />}
+    </>
+  );
+}
+
+/**
+ * What each file produced.
+ *
+ * Shown in full rather than as a count, because the interesting cases are the
+ * failures: a scanned PDF looks identical to a successful import until you go
+ * looking for its content and it isn't there.
+ */
+function ImportReport({
+  report,
+  onClose,
+}: {
+  report: ImportedFile[];
+  onClose: () => void;
+}) {
+  const added = report.filter((r) => r.outcome.status === "extracted" && !r.skippedDuplicate);
+  const skipped = report.filter((r) => r.skippedDuplicate);
+  const problems = report.filter((r) => r.outcome.status !== "extracted");
 
   return (
-    <Card className="p-5">
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Title — e.g. VCAA Biology study design 2023–2027"
-          className="h-9 min-w-[240px] flex-1 rounded-[var(--r-sm)] border border-[var(--line)] bg-[var(--surface-hi)] px-3 text-[13px] text-[var(--ink)] placeholder:text-[var(--ink-faint)] outline-none focus:border-[var(--accent)]"
-        />
-        <select
-          value={subjectId ?? ""}
-          onChange={(e) => setSubjectId(e.target.value ? Number(e.target.value) : null)}
-          className="h-9 rounded-[var(--r-sm)] border border-[var(--line)] bg-[var(--surface-hi)] px-2.5 text-[12.5px] text-[var(--ink)]"
+    <Card className="animate-rise mt-3 p-5">
+      <div className="flex items-baseline gap-3">
+        <h3 className="text-[13.5px] font-medium">
+          {added.length} added
+          {skipped.length > 0 && `, ${skipped.length} already there`}
+          {problems.length > 0 && `, ${problems.length} couldn't be read`}
+        </h3>
+        <button
+          onClick={onClose}
+          className="pressable ml-auto text-[12px] text-[var(--ink-faint)] hover:text-[var(--ink)]"
         >
-          <option value="">Any subject</option>
-          {subjects.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
+          Dismiss
+        </button>
+      </div>
+
+      {problems.length > 0 && (
+        <div className="mt-3 space-y-2">
+          {problems.map((p, i) => (
+            <div key={`${p.name}-${i}`} className="flex items-start gap-2">
+              <AlertTriangle size={13} className="mt-[2px] shrink-0 text-[var(--warn)]" />
+              <div className="min-w-0 text-[12.5px] leading-relaxed">
+                <span className="text-[var(--ink)]">{p.name}</span>
+                <span className="text-[var(--ink-dim)]">
+                  {" — "}
+                  {p.outcome.status === "scanned"
+                    ? "a scanned PDF: its pages are images, so there's no text to read. Running it through OCR first would fix it."
+                    : p.outcome.status === "unsupported" || p.outcome.status === "failed"
+                      ? p.outcome.reason
+                      : ""}
+                </span>
+              </div>
+            </div>
           ))}
-        </select>
-      </div>
+        </div>
+      )}
 
-      <div className="mt-3 flex flex-wrap gap-1.5">
-        {RESOURCE_KINDS.map((k) => (
-          <Chip key={k.value} active={kind === k.value} onClick={() => setKind(k.value)} title={k.hint}>
-            {k.label}
-          </Chip>
-        ))}
-      </div>
-
-      <textarea
-        value={pasted}
-        onChange={(e) => setPasted(e.target.value)}
-        placeholder="Paste the text here — or use the file button below for .txt and .md files."
-        className="selectable mt-3 h-28 w-full resize-none rounded-[var(--r-md)] border border-[var(--line)] bg-[var(--surface-hi)] p-3 text-[12.5px] leading-relaxed text-[var(--ink)] placeholder:text-[var(--ink-faint)] outline-none focus:border-[var(--accent)]"
-      />
-
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Button
-          size="sm"
-          variant="primary"
-          disabled={busy || pasted.trim().length < 40}
-          onClick={() => void commit(pasted, "pasted", "Pasted material")}
-        >
-          <Sparkle size={13} />
-          {busy ? "Indexing…" : "Add pasted text"}
-        </Button>
-
-        <Button size="sm" disabled={busy} onClick={() => fileRef.current?.click()}>
-          <Upload size={13} />
-          Add a file
-        </Button>
-        <input
-          ref={fileRef}
-          type="file"
-          multiple
-          accept=".txt,.md,.markdown,.csv,.html,.htm,.json"
-          className="hidden"
-          onChange={(e) => {
-            if (e.target.files?.length) void readFiles(e.target.files);
-            e.target.value = "";
-          }}
-        />
-
-        <span className="text-[11.5px] text-[var(--ink-faint)]">
-          .txt and .md files. PDFs need pasting for now.
-        </span>
-      </div>
+      {added.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {added.map((a, i) => (
+            <span
+              key={`${a.name}-${i}`}
+              className="rounded-full border border-[var(--line)] px-2 py-0.5 text-[11.5px] text-[var(--ink-dim)]"
+            >
+              {a.name}
+            </span>
+          ))}
+        </div>
+      )}
     </Card>
   );
 }

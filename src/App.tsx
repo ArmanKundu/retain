@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { BarChart3, BookMarked, CalendarClock, ClipboardList, Dna, Home, Inbox as InboxIcon, Layers, Settings as SettingsIcon, Timer as TimerIcon } from "lucide-react";
+import { BarChart3, BookMarked, CalendarClock, ClipboardList, Dna, Home, Inbox as InboxIcon, Layers, MessageSquare, Settings as SettingsIcon, Timer as TimerIcon } from "lucide-react";
 
 import { Onboarding } from "./screens/Onboarding";
 import { Today } from "./screens/Today";
@@ -11,6 +11,7 @@ import { ErrorLog } from "./screens/ErrorLog";
 import { Inbox } from "./screens/Inbox";
 import { Assessments } from "./screens/Assessments";
 import { Biology } from "./screens/Biology";
+import { Assistant } from "./screens/Assistant";
 import { Library } from "./screens/Library";
 import { Progress } from "./screens/Progress";
 import { Settings } from "./screens/Settings";
@@ -37,6 +38,7 @@ const NAV: { route: Route; label: string; Icon: typeof Home; onlyIf?: (s: AppSub
     Icon: Dna,
     onlyIf: (subjects) => subjects.some(isBiologyThreeFour),
   },
+  { route: "assistant", label: "Assistant", Icon: MessageSquare },
   { route: "library", label: "Library", Icon: BookMarked },
   { route: "progress", label: "Progress", Icon: BarChart3 },
   { route: "settings", label: "Settings", Icon: SettingsIcon },
@@ -172,6 +174,7 @@ export default function App() {
         {route === "assessments" && <Assessments />}
         {route === "biology" && <Biology />}
         {route === "library" && <Library />}
+        {route === "assistant" && <Assistant />}
         {route === "progress" && <Progress />}
         {route === "settings" && <Settings />}
         </div>

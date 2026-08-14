@@ -9,9 +9,15 @@
 //!   when no key is configured, and the UI turns that into "add a key to enable
 //!   this" rather than an error. Nothing in the core app — timer, cards, error
 //!   log, streak — calls into this module.
-//! * **No general chatbot.** There is no free-text endpoint. Each function
-//!   builds its own prompt from app data and parses a specific shape back. You
-//!   cannot ask Retain a question.
+//! * **Prompts are assembled by the app, never passed through.** Five of the
+//!   six entry points build their own prompt from app data and parse a specific
+//!   shape back. The sixth, `ask`, backs the study assistant and takes a system
+//!   prompt from the caller — but that caller is `assistant::build_prompt`,
+//!   which constructs both halves from retrieved material, attachments and your
+//!   Retain data. A user's raw text never becomes the system prompt.
+//!
+//!   This changed deliberately when the assistant was added. It was previously
+//!   true that Retain had no chat surface at all; saying so now would be false.
 //!
 //! ## Model choice
 //!
@@ -775,6 +781,16 @@ impl Ai {
         Ok(cards)
     }
 
+    /// One turn with a caller-supplied system prompt.
+    ///
+    /// The assistant needs this because its system prompt changes with the
+    /// grounding mode. It is still not a general chat surface: the prompt is
+    /// built by `assistant::build_prompt` from app data, never passed through
+    /// from the user.
+    pub async fn ask(&self, system: &str, user: &str) -> Result<String, AiUnavailable> {
+        complete(self.provider, &self.model, system, user, 4000).await
+    }
+
     pub async fn weekly_review(&self, summary: &str) -> Result<String, AiUnavailable> {
         complete(self.provider, &self.model, SYSTEM_WEEKLY, summary, 900).await
     }
@@ -1291,15 +1307,33 @@ mod tests {
         assert!(!body.contains("(\"key\", key"));
     }
 
-    /// There must be no free-text/chat entry point anywhere in this module.
+    /// The user's text must never become the system prompt.
+    ///
+    /// This replaced an earlier test asserting there was no chat surface at
+    /// all. That stopped being true when the assistant was added, and a test
+    /// asserting something false is worse than no test. What still holds — and
+    /// is what actually matters — is that both halves of every prompt are
+    /// assembled by Retain from app data.
     #[test]
-    fn there_is_no_general_chat_surface() {
+    fn a_system_prompt_is_never_user_supplied() {
         let source = include_str!("ai.rs");
-        // Built at runtime so this test doesn't match its own source literals.
-        let prefix = format!("pub async {}", "fn ");
-        for name in ["chat", "ask", "prompt", "message", "converse"] {
-            let banned = format!("{prefix}{name}");
-            assert!(!source.contains(&banned), "found a chatbot surface: {banned}");
+        let body = source.split("#[cfg(test)]").next().unwrap();
+
+        // `ask` is the only entry point taking a system prompt, and its single
+        // caller builds it from a fixed pair of constants.
+        assert_eq!(
+            body.matches("system: &str").count(),
+            2,
+            "a new function accepts a caller-supplied system prompt"
+        );
+
+        let assistant = include_str!("assistant.rs");
+        assert!(assistant.contains("pub const SYSTEM_STRICT"));
+        assert!(assistant.contains("pub const SYSTEM_OPEN"));
+
+        let commands = include_str!("commands.rs");
+        for chosen in ["assistant::SYSTEM_STRICT", "assistant::SYSTEM_OPEN"] {
+            assert!(commands.contains(chosen), "{chosen} should be what reaches `ask`");
         }
     }
 }

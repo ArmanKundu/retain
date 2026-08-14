@@ -28,16 +28,23 @@ import type {
   CalendarStatus,
   CommandWord,
   DeckSummary,
+  ChatMessage,
+  Conversation,
   Excerpt,
   ExamState,
   GroundedText,
+  Grounding,
+  ImportedFile,
   LibraryFilter,
   LibraryItem,
   ModelOption,
+  NewAttachment,
+  Outcome,
   Resource,
   ResourceKind,
   OutlineRow,
   PracticeExam,
+  SubjectFolder,
   TopicNode,
   UpdateReport,
   CardSuggestion,
@@ -328,6 +335,32 @@ export const api = {
   libraryItemMarkdown: (id: number) => invoke<string>("library_item_markdown", { id }),
   /** Writes a .md into Downloads and returns the path. */
   exportLibraryItem: (id: number) => invoke<string>("export_library_item", { id }),
+
+  // --- subject folders and file import ---
+  /** Creates ~/Documents/Retain/<Subject>/ for each subject. Idempotent. */
+  ensureSubjectFolders: () => invoke<SubjectFolder[]>("ensure_subject_folders"),
+  revealFolder: (path: string) => invoke<void>("reveal_folder", { path }),
+  /** Reads every readable file in a folder. Already-imported files are skipped. */
+  importFolder: (path: string, subjectId: number | null) =>
+    invoke<ImportedFile[]>("import_folder", { path, subjectId }),
+  /** Extracts text from one file — used for chat attachments. */
+  readFileText: (path: string) => invoke<Outcome>("read_file_text", { path }),
+
+  // --- the assistant ---
+  listConversations: (limit = 100) => invoke<Conversation[]>("list_conversations", { limit }),
+  createConversation: (subjectId: number | null, grounding: Grounding) =>
+    invoke<number>("create_conversation", { subjectId, grounding }),
+  conversationMessages: (conversationId: number) =>
+    invoke<ChatMessage[]>("conversation_messages", { conversationId }),
+  setConversationGrounding: (conversationId: number, grounding: Grounding) =>
+    invoke<void>("set_conversation_grounding", { conversationId, grounding }),
+  deleteConversation: (conversationId: number) =>
+    invoke<void>("delete_conversation", { conversationId }),
+  /** One full turn. The question is stored before the model is called. */
+  askAssistant: (conversationId: number, question: string, attachments: NewAttachment[] = []) =>
+    invoke<ChatMessage>("ask_assistant", { conversationId, question, attachments }),
+  conversationMarkdown: (conversationId: number) =>
+    invoke<string>("conversation_markdown", { conversationId }),
 
   // --- export / import ---
   exportJson: () => invoke<string>("export_json"),

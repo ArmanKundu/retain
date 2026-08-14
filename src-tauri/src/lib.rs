@@ -7,6 +7,7 @@ mod db;
 mod errors;
 mod export;
 mod idle;
+mod ingest;
 mod inbox;
 mod models;
 mod notifications;
@@ -18,6 +19,7 @@ mod ics;
 mod library;
 mod anki_import;
 mod assessments;
+mod assistant;
 mod capture;
 mod cards;
 mod scheduler;
@@ -29,6 +31,7 @@ mod timer;
 mod tray;
 mod update;
 mod util;
+mod workspace;
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -58,6 +61,8 @@ pub fn run() {
         // Opens URLs in the user's default browser. Used for the release page
         // when an update is available, and for VCAA links later.
         .plugin(tauri_plugin_opener::init())
+        // Native file and folder pickers, for adding material.
+        .plugin(tauri_plugin_dialog::init())
         // Bridges macOS UNUserNotificationCenter. Onboarding screen 3 requests
         // permission through this; Pomodoro phase changes use it here.
         .plugin(tauri_plugin_notification::init())
@@ -210,6 +215,18 @@ pub fn run() {
             commands::library_item_markdown,
             commands::export_library_item,
             commands::ai_notes,
+            // Subject folders, folder import, and the assistant.
+            commands::ensure_subject_folders,
+            commands::reveal_folder,
+            commands::import_folder,
+            commands::read_file_text,
+            commands::list_conversations,
+            commands::create_conversation,
+            commands::conversation_messages,
+            commands::set_conversation_grounding,
+            commands::delete_conversation,
+            commands::ask_assistant,
+            commands::conversation_markdown,
             commands::list_ai_models,
             commands::test_ai_model,
             // Calendar — ICS subscription only.

@@ -22,7 +22,7 @@ use crate::models::*;
 use crate::timer::{self, ActiveTimer, SharedTimer};
 use crate::tray::TrayHandles;
 use crate::scheduler;
-use crate::{ai, assessments, biology, ics, library, resources, update, cards, errors, export, inbox, notifications, provider, secrets, settings, streak, subjects};
+use crate::{ai, assessments, assistant, biology, ics, ingest, library, resources, update, workspace, cards, errors, export, inbox, notifications, provider, secrets, settings, streak, subjects};
 
 /// Shared state, created in `lib.rs` and handed to every command.
 pub struct AppState {
@@ -1716,4 +1716,260 @@ pub fn export_library_item(
     let path = dir.join(name);
     std::fs::write(&path, markdown).map_err(|e| CommandError(format!("Couldn't write it: {e}")))?;
     Ok(path.to_string_lossy().to_string())
+}
+
+// ---------------------------------------------------------------------------
+// Workspace folders and folder import
+// ---------------------------------------------------------------------------
+
+/// Create (or find) a folder per subject under ~/Documents/Retain.
+#[tauri::command]
+pub fn ensure_subject_folders(
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> CmdResult<Vec<workspace::SubjectFolder>> {
+    let docs = app
+        .path()
+        .document_dir()
+        .map_err(|_| CommandError("Couldn't find your Documents folder.".into()))?;
+    Ok(workspace::ensure(&db(&state), &docs)?)
+}
+
+/// Reveal a folder in Finder.
+#[tauri::command]
+pub fn reveal_folder(app: AppHandle, path: String) -> CmdResult<()> {
+    // Only ever a folder Retain created, checked before it reaches the OS.
+    let docs = app
+        .path()
+        .document_dir()
+        .map_err(|_| CommandError("Couldn't find your Documents folder.".into()))?;
+    let root = workspace::root(&docs);
+
+    if !std::path::Path::new(&path).starts_with(&root) {
+        return Err(CommandError("That isn't a Retain folder.".into()));
+    }
+
+    tauri_plugin_opener::OpenerExt::opener(&app)
+        .open_path(path, None::<&str>)
+        .map_err(|e| CommandError(e.to_string()))?;
+    Ok(())
+}
+
+/// What one file produced, once stored.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportedFile {
+    pub name: String,
+    pub outcome: ingest::Outcome,
+    /// Set when it was stored.
+    pub resource_id: Option<i64>,
+    pub skipped_duplicate: bool,
+}
+
+/// Read every readable file in a folder and index what it finds.
+///
+/// Re-runnable: a file already imported from the same path is skipped rather
+/// than duplicated, so pressing Sync after dropping in two new PDFs costs two
+/// files of work, not thirty.
+#[tauri::command]
+pub fn import_folder(
+    state: State<'_, AppState>,
+    path: String,
+    subject_id: Option<i64>,
+) -> CmdResult<Vec<ImportedFile>> {
+    let dir = std::path::PathBuf::from(&path);
+    if !dir.is_dir() {
+        return Err(CommandError("That isn't a folder.".into()));
+    }
+
+    let files = ingest::walk(&dir);
+    let mut out = Vec::with_capacity(files.len());
+
+    for file in files {
+        let name = file
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("file")
+            .to_string();
+
+        {
+            let conn = db(&state);
+            if workspace::already_imported(&conn, &file).unwrap_or(false) {
+                out.push(ImportedFile {
+                    name,
+                    outcome: ingest::Outcome::Extracted {
+                        path: file.to_string_lossy().to_string(),
+                        name: file.file_name().unwrap_or_default().to_string_lossy().to_string(),
+                        text: String::new(),
+                        words: 0,
+                    },
+                    resource_id: None,
+                    skipped_duplicate: true,
+                });
+                continue;
+            }
+        }
+
+        // Extraction happens without the database lock held — a folder of PDFs
+        // takes real time and would otherwise freeze the whole app.
+        let outcome = ingest::extract_file(&file);
+
+        let resource_id = if let ingest::Outcome::Extracted { text, .. } = &outcome {
+            let mut conn = state.db.lock().expect("database mutex poisoned");
+            resources::add_from_file(
+                &mut conn,
+                subject_id,
+                &workspace::title_from_filename(&name),
+                workspace::guess_kind(&name),
+                Some(&name),
+                text,
+                Some(&file.to_string_lossy()),
+                chrono::Utc::now(),
+            )
+            .ok()
+        } else {
+            None
+        };
+
+        out.push(ImportedFile {
+            name,
+            outcome,
+            resource_id,
+            skipped_duplicate: false,
+        });
+    }
+
+    Ok(out)
+}
+
+/// Read one file chosen in the picker — used for chat attachments too.
+#[tauri::command]
+pub fn read_file_text(path: String) -> CmdResult<ingest::Outcome> {
+    Ok(ingest::extract_file(std::path::Path::new(&path)))
+}
+
+// ---------------------------------------------------------------------------
+// The assistant
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn list_conversations(
+    state: State<'_, AppState>,
+    limit: i64,
+) -> CmdResult<Vec<assistant::Conversation>> {
+    Ok(assistant::list(&db(&state), limit.clamp(1, 200))?)
+}
+
+#[tauri::command]
+pub fn create_conversation(
+    state: State<'_, AppState>,
+    subject_id: Option<i64>,
+    grounding: assistant::Grounding,
+) -> CmdResult<i64> {
+    Ok(assistant::create(&db(&state), subject_id, grounding, chrono::Utc::now())?)
+}
+
+#[tauri::command]
+pub fn conversation_messages(
+    state: State<'_, AppState>,
+    conversation_id: i64,
+) -> CmdResult<Vec<assistant::Message>> {
+    Ok(assistant::messages(&db(&state), conversation_id)?)
+}
+
+#[tauri::command]
+pub fn set_conversation_grounding(
+    state: State<'_, AppState>,
+    conversation_id: i64,
+    grounding: assistant::Grounding,
+) -> CmdResult<()> {
+    Ok(assistant::set_grounding(&db(&state), conversation_id, grounding)?)
+}
+
+#[tauri::command]
+pub fn delete_conversation(state: State<'_, AppState>, conversation_id: i64) -> CmdResult<()> {
+    Ok(assistant::delete(&db(&state), conversation_id)?)
+}
+
+/// Ask a question. The whole turn: store it, retrieve, answer, store that.
+///
+/// The user's message is written before the model is called, so a failed or
+/// slow request never loses what you typed.
+#[tauri::command]
+pub async fn ask_assistant(
+    state: State<'_, AppState>,
+    conversation_id: i64,
+    question: String,
+    attachments: Vec<assistant::NewAttachment>,
+) -> CmdResult<assistant::Message> {
+    let now = chrono::Utc::now();
+
+    // --- everything that needs the database, before any network work --------
+    let (client, model, grounding, subject_id, prompt, excerpts) = {
+        let mut conn = state.db.lock().expect("database mutex poisoned");
+
+        let convo = assistant::list(&conn, 200)?
+            .into_iter()
+            .find(|c| c.id == conversation_id)
+            .ok_or_else(|| CommandError("That conversation no longer exists.".into()))?;
+
+        let history = assistant::messages(&conn, conversation_id)?;
+        assistant::add_user_message(&mut conn, conversation_id, &question, &attachments, now)?;
+
+        let client = ai::Ai::from(&conn)?;
+        let model = client_model(&conn);
+
+        let excerpts =
+            resources::search(&conn, &question, convo.subject_id, assistant::RETRIEVE)
+                .unwrap_or_default();
+        let app_data = assistant::app_context(&conn);
+
+        let prompt = assistant::build_prompt(
+            &excerpts,
+            &attachments,
+            &app_data,
+            &history,
+            &question,
+            convo.grounding,
+        );
+
+        (client, model, convo.grounding, convo.subject_id, prompt, excerpts)
+    };
+    let _ = subject_id;
+
+    let system = match grounding {
+        assistant::Grounding::Strict => assistant::SYSTEM_STRICT,
+        assistant::Grounding::Open => assistant::SYSTEM_OPEN,
+    };
+
+    let answer = client.ask(system, &prompt).await?;
+
+    let conn = db(&state);
+    let id = assistant::add_assistant_message(
+        &conn,
+        conversation_id,
+        &answer,
+        &excerpts,
+        Some(&model),
+        chrono::Utc::now(),
+    )?;
+
+    assistant::messages(&conn, conversation_id)?
+        .into_iter()
+        .find(|m| m.id == id)
+        .ok_or_else(|| CommandError("The answer couldn't be saved.".into()))
+}
+
+/// A conversation as Markdown, for saving or printing.
+#[tauri::command]
+pub fn conversation_markdown(
+    state: State<'_, AppState>,
+    conversation_id: i64,
+) -> CmdResult<String> {
+    let conn = db(&state);
+    let convo = assistant::list(&conn, 200)?
+        .into_iter()
+        .find(|c| c.id == conversation_id)
+        .ok_or_else(|| CommandError("That conversation no longer exists.".into()))?;
+    Ok(assistant::to_markdown(&convo, &assistant::messages(&conn, conversation_id)?)?)
 }

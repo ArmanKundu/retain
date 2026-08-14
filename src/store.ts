@@ -25,7 +25,8 @@ import type {
 // is where you notice you need more cards.
 export type Route =
   | "today" | "timer" | "inbox" | "review" | "errors"
-  | "assessments" | "biology" | "library" | "progress" | "settings" | "import";
+  | "assessments" | "biology" | "library" | "assistant"
+  | "progress" | "settings" | "import";
 
 interface AppState {
   ready: boolean;

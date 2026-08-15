@@ -114,9 +114,9 @@
   /* The capture bar sits over whatever app you were in, so it's blurrier and
      more transparent than in-app glass — the wallpaper showing through is what
      makes it read as a system utility rather than a window. */
-  --spotlight: rgba(30, 30, 34, 0.58);
-  --spotlight-line: rgba(255, 255, 255, 0.14);
-  --spotlight-blur: 48px;
+  --spotlight: rgba(28, 28, 32, 0.42);
+  --spotlight-line: rgba(255, 255, 255, 0.16);
+  --spotlight-blur: 64px;
 
   /* The atmospheric wash behind the app. Almost imperceptible by design: it
      gives the background depth without ever competing with content. */
@@ -144,8 +144,8 @@
   --glass: rgba(255, 255, 255, 0.72);
   --glass-line: rgba(255, 255, 255, 0.55);
 
-  --spotlight: rgba(255, 255, 255, 0.62);
-  --spotlight-line: rgba(255, 255, 255, 0.7);
+  --spotlight: rgba(255, 255, 255, 0.5);
+  --spotlight-line: rgba(255, 255, 255, 0.8);
   --sheet-line: rgba(255, 255, 255, 0.75);
 
   --wash-a: rgba(91, 141, 239, 0.10);
@@ -207,9 +207,19 @@
   -webkit-backdrop-filter: blur(var(--spotlight-blur)) saturate(190%);
   border: 1px solid var(--spotlight-line);
   box-shadow:
-    0 24px 68px rgba(0, 0, 0, 0.34),
-    0 2px 10px rgba(0, 0, 0, 0.18),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+    0 24px 68px rgba(0, 0, 0, 0.28),
+    0 2px 10px rgba(0, 0, 0, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+/* The drag handle. An undecorated window has no title bar to grab, so one
+   region is designated draggable — otherwise the bar is stuck wherever macOS
+   centred it. */
+.spotlight-drag {
+  -webkit-app-region: drag;
+}
+.spotlight-drag :is(input, textarea, button, kbd) {
+  -webkit-app-region: no-drag;
 }
 
 /* Modals -----------------------------------------------------------------
@@ -459,5 +469,59 @@ textarea:focus-visible,
     white-space: pre-wrap;
     font-size: 11pt;
     line-height: 1.6;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   The card flip.
+
+   3D rather than a crossfade, because the card is meant to feel like an object
+   with two sides — that's the whole metaphor, and a fade makes it a div whose
+   contents changed. `backface-visibility` is what stops the question showing
+   through the answer mid-turn.
+   --------------------------------------------------------------------------- */
+
+.flip-scene {
+  perspective: 1600px;
+}
+
+.flip-inner {
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 520ms cubic-bezier(0.34, 1.2, 0.44, 1);
+}
+
+.flip-inner.is-flipped {
+  transform: rotateY(180deg);
+}
+
+.flip-face {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.flip-face.is-back {
+  position: absolute;
+  inset: 0;
+  transform: rotateY(180deg);
+}
+
+/* Reduced motion gets the state change without the rotation — the answer still
+   appears, it just doesn't spin to get there. */
+@media (prefers-reduced-motion: reduce) {
+  .flip-inner {
+    transition: none;
+  }
+  .flip-inner.is-flipped {
+    transform: none;
+  }
+  .flip-face.is-back {
+    transform: none;
+  }
+  .flip-inner:not(.is-flipped) .flip-face.is-back {
+    visibility: hidden;
+  }
+  .flip-inner.is-flipped .flip-face:not(.is-back) {
+    visibility: hidden;
   }
 }

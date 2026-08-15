@@ -49,7 +49,10 @@ const MAX_CHARS: usize = 4_000_000;
 pub enum ResourceKind {
     StudyDesign,
     PastPaper,
-    Notes,
+    ExamSolution,
+    SchoolNotes,
+    PersonalNotes,
+    Textbook,
     Other,
 }
 
@@ -58,8 +61,60 @@ impl ResourceKind {
         match self {
             ResourceKind::StudyDesign => "study_design",
             ResourceKind::PastPaper => "past_paper",
-            ResourceKind::Notes => "notes",
+            ResourceKind::ExamSolution => "exam_solution",
+            ResourceKind::SchoolNotes => "school_notes",
+            ResourceKind::PersonalNotes => "personal_notes",
+            ResourceKind::Textbook => "textbook",
             ResourceKind::Other => "other",
+        }
+    }
+
+    /// The subfolder this kind lives in.
+    ///
+    /// This is the filing system: `Retain/Biology/Past papers/`. Dropping a PDF
+    /// into the right folder is the only tagging you do, and it carries both
+    /// the subject and the kind — which is why there's no per-file form.
+    pub fn folder(self) -> &'static str {
+        match self {
+            ResourceKind::StudyDesign => "Study design",
+            ResourceKind::PastPaper => "Past papers",
+            ResourceKind::ExamSolution => "Solutions and reports",
+            ResourceKind::SchoolNotes => "School notes",
+            ResourceKind::PersonalNotes => "My notes",
+            ResourceKind::Textbook => "Textbook",
+            ResourceKind::Other => "Other",
+        }
+    }
+
+    /// Every kind, in the order they should be offered and created.
+    pub fn all() -> [ResourceKind; 7] {
+        [
+            ResourceKind::StudyDesign,
+            ResourceKind::PastPaper,
+            ResourceKind::ExamSolution,
+            ResourceKind::SchoolNotes,
+            ResourceKind::PersonalNotes,
+            ResourceKind::Textbook,
+            ResourceKind::Other,
+        ]
+    }
+
+    /// How much weight an answer should give this.
+    ///
+    /// Lower sorts first. The study design outranks everything because it
+    /// defines what's examinable; a marking scheme outranks a past paper
+    /// because it says what actually earned marks; your own notes come last
+    /// because they record what you understood at the time, which is exactly
+    /// what you're trying to correct.
+    pub fn authority(self) -> u8 {
+        match self {
+            ResourceKind::StudyDesign => 0,
+            ResourceKind::ExamSolution => 1,
+            ResourceKind::PastPaper => 2,
+            ResourceKind::Textbook => 3,
+            ResourceKind::SchoolNotes => 4,
+            ResourceKind::PersonalNotes => 5,
+            ResourceKind::Other => 6,
         }
     }
 
@@ -70,10 +125,13 @@ impl ResourceKind {
     /// model to treat an old exam question as a syllabus requirement.
     pub fn context_label(self) -> &'static str {
         match self {
-            ResourceKind::StudyDesign => "From the study design",
-            ResourceKind::PastPaper => "From a past exam",
-            ResourceKind::Notes => "From your notes",
-            ResourceKind::Other => "From your material",
+            ResourceKind::StudyDesign => "From the study design (authoritative on what is examinable)",
+            ResourceKind::PastPaper => "From a past exam paper",
+            ResourceKind::ExamSolution => "From a marking scheme or examiner's report",
+            ResourceKind::SchoolNotes => "From school notes",
+            ResourceKind::PersonalNotes => "From the student's own notes",
+            ResourceKind::Textbook => "From a textbook",
+            ResourceKind::Other => "From the student's material",
         }
     }
 
@@ -81,7 +139,11 @@ impl ResourceKind {
         match s {
             "study_design" => ResourceKind::StudyDesign,
             "past_paper" => ResourceKind::PastPaper,
-            "notes" => ResourceKind::Notes,
+            "exam_solution" => ResourceKind::ExamSolution,
+            // Pre-migration rows said only "notes" without saying whose.
+            "school_notes" | "notes" => ResourceKind::SchoolNotes,
+            "personal_notes" => ResourceKind::PersonalNotes,
+            "textbook" => ResourceKind::Textbook,
             _ => ResourceKind::Other,
         }
     }
@@ -380,7 +442,7 @@ pub fn search(
           ORDER BY bm25(resource_chunks_fts) LIMIT ?3",
     )?;
 
-    let rows = stmt
+    let rows: Vec<Excerpt> = stmt
         .query_map(rusqlite::params![query, subject_id, limit], |r| {
             Ok(Excerpt {
                 resource_id: r.get(0)?,
@@ -393,6 +455,18 @@ pub fn search(
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok(rows)
+}
+
+/// Order excerpts so the most authoritative sources are read first.
+///
+/// BM25 ranks by textual relevance, which is the right first pass but the wrong
+/// last word: a lucky keyword match in your own notes should not outrank the
+/// study design paragraph that defines the term. Models weight earlier context
+/// less than later, so this puts the authoritative material where it will be
+/// read as the frame rather than as an afterthought.
+pub fn by_authority(mut excerpts: Vec<Excerpt>) -> Vec<Excerpt> {
+    excerpts.sort_by_key(|e| e.kind.authority());
+    excerpts
 }
 
 /// Render excerpts as a context block for a prompt.

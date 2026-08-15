@@ -24,6 +24,7 @@ import type {
   IntervalPreview,
   ImportReport,
   ImportResult,
+  CaptureAttachment,
   CalendarEvent,
   CalendarStatus,
   CommandWord,
@@ -46,6 +47,9 @@ import type {
   OutlineRow,
   PracticeExam,
   SubjectFolder,
+  NewBlock,
+  NewCaptureAttachment,
+  TimeBlock,
   TopicNode,
   UpdateReport,
   CardSuggestion,
@@ -366,6 +370,20 @@ export const api = {
     invoke<ChatMessage>("ask_assistant", { conversationId, question, attachments }),
   conversationMarkdown: (conversationId: number) =>
     invoke<string>("conversation_markdown", { conversationId }),
+
+  /** Save a capture with screenshots or files attached, in one write. */
+  saveCaptureWithAttachments: (text: string, attachments: NewCaptureAttachment[]) =>
+    invoke<number>("save_capture_with_attachments", { text, attachments }),
+  captureAttachments: (captureId: number) =>
+    invoke<CaptureAttachment[]>("capture_attachments", { captureId }),
+
+  // --- time blocks ---
+  listBlocks: () => invoke<TimeBlock[]>("list_blocks"),
+  blocksForDate: (localDate: string) =>
+    invoke<TimeBlock[]>("blocks_for_date", { localDate }),
+  createBlock: (block: NewBlock) => invoke<number>("create_block", { block }),
+  updateBlock: (id: number, block: NewBlock) => invoke<void>("update_block", { id, block }),
+  deleteBlock: (id: number) => invoke<void>("delete_block", { id }),
 
   // --- export / import ---
   exportJson: () => invoke<string>("export_json"),

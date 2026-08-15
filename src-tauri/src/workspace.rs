@@ -65,9 +65,19 @@ pub fn ensure(conn: &Connection, documents: &Path) -> Result<Vec<SubjectFolder>>
         let _ = std::fs::write(
             &readme,
             "Retain made these folders, one per subject.\n\n\
-             Put your notes, past papers and the study design into the matching folder, then\n\
-             open Retain and press Sync on the Library screen. It reads the text and indexes it\n\
-             so the assistant can answer from your own material.\n\n\
+             Each subject has folders for the different kinds of material:\n\n\
+               Study design           what VCAA says is examinable\n\
+               Past papers            exams and SACs\n\
+               Solutions and reports  marking schemes, examiner's reports\n\
+               School notes           from your teacher\n\
+               My notes               your own\n\
+               Textbook               chapters and extracts\n\n\
+             Drop files into the matching folder, then open Retain and press Sync on the\n\
+             Library screen. The folder tells Retain both the subject and what the document\n\
+             is, so there is nothing to fill in.\n\n\
+             The distinction matters: the assistant treats the study design as authoritative\n\
+             about what is examinable, and your own notes as a record of what you understood\n\
+             at the time.\n\n\
              Nothing here is moved or modified. Deleting a folder loses nothing but the\n\
              convenience of dropping files into it.\n",
         );
@@ -85,6 +95,16 @@ pub fn ensure(conn: &Connection, documents: &Path) -> Result<Vec<SubjectFolder>>
         let path = base.join(safe_folder_name(&name));
         std::fs::create_dir_all(&path)
             .map_err(|e| anyhow!("Couldn't create {}: {e}", path.display()))?;
+
+        // One subfolder per kind of material. Dropping a file into the right
+        // one is the whole filing system — the folder carries both the subject
+        // and what the document is.
+        for kind in crate::resources::ResourceKind::all() {
+            if kind == crate::resources::ResourceKind::Other {
+                continue; // "Other" is a fallback, not somewhere to file things
+            }
+            let _ = std::fs::create_dir_all(path.join(kind.folder()));
+        }
 
         let display = path.to_string_lossy().to_string();
         conn.execute(
@@ -124,17 +144,49 @@ pub fn already_imported(conn: &Connection, path: &Path) -> Result<bool> {
     Ok(n > 0)
 }
 
-/// Guess what a file is from its name.
+/// What kind of material a file is, from where it sits.
 ///
-/// A guess, and the UI lets you change it — but "2023 VCAA Exam 1.pdf" landing
-/// under Past paper without being asked is the difference between filing thirty
-/// documents and filing none.
+/// The folder is the answer. `Retain/Biology/Past papers/2023 exam.pdf` is a
+/// past paper because of the folder it's in, not because of a keyword in its
+/// name — which is what turns filing from a per-file form into the one drag you
+/// were going to do anyway.
+///
+/// The filename is only consulted for files sitting loose in a subject folder,
+/// or picked from somewhere else entirely.
+pub fn kind_for(path: &Path) -> crate::resources::ResourceKind {
+    use crate::resources::ResourceKind;
+
+    // Walk up looking for a folder whose name matches a kind.
+    for ancestor in path.ancestors().skip(1) {
+        let Some(folder) = ancestor.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if let Some(kind) = ResourceKind::all()
+            .into_iter()
+            .find(|k| k.folder().eq_ignore_ascii_case(folder))
+        {
+            return kind;
+        }
+    }
+
+    guess_kind(&path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_lowercase())
+}
+
+/// Fall back to the filename when the folder says nothing.
 pub fn guess_kind(name: &str) -> crate::resources::ResourceKind {
     use crate::resources::ResourceKind;
     let n = name.to_lowercase();
 
     if n.contains("study design") || n.contains("studydesign") || n.contains("curriculum") {
         ResourceKind::StudyDesign
+    } else if n.contains("solution")
+        || n.contains("answer")
+        || n.contains("marking")
+        || n.contains("examiner")
+        || n.contains("report")
+    {
+        // Checked before "exam", or "2023 exam solutions.pdf" files as a paper.
+        ResourceKind::ExamSolution
     } else if n.contains("exam")
         || n.contains("paper")
         || n.contains("vcaa")
@@ -142,8 +194,10 @@ pub fn guess_kind(name: &str) -> crate::resources::ResourceKind {
         || n.contains("trial")
     {
         ResourceKind::PastPaper
+    } else if n.contains("textbook") || n.contains("chapter") {
+        ResourceKind::Textbook
     } else if n.contains("note") || n.contains("summary") || n.contains("revision") {
-        ResourceKind::Notes
+        ResourceKind::SchoolNotes
     } else {
         ResourceKind::Other
     }
@@ -176,12 +230,61 @@ mod tests {
     }
 
     #[test]
-    fn a_files_kind_is_guessed_from_its_name() {
-        assert_eq!(guess_kind("VCAA Biology Study Design.pdf"), ResourceKind::StudyDesign);
-        assert_eq!(guess_kind("2023 VCAA Exam 1.pdf"), ResourceKind::PastPaper);
+    fn a_files_kind_is_guessed_from_its_name_when_the_folder_says_nothing() {
+        assert_eq!(guess_kind("vcaa biology study design.pdf"), ResourceKind::StudyDesign);
+        assert_eq!(guess_kind("2023 vcaa exam 1.pdf"), ResourceKind::PastPaper);
         assert_eq!(guess_kind("unit 3 sac.docx"), ResourceKind::PastPaper);
-        assert_eq!(guess_kind("cell biology notes.md"), ResourceKind::Notes);
+        assert_eq!(guess_kind("cell biology notes.md"), ResourceKind::SchoolNotes);
         assert_eq!(guess_kind("random thing.txt"), ResourceKind::Other);
+
+        // Solutions are checked before papers, or "2023 exam solutions" files
+        // as the paper it answers.
+        assert_eq!(guess_kind("2023 exam solutions.pdf"), ResourceKind::ExamSolution);
+        assert_eq!(guess_kind("examiners report 2022.pdf"), ResourceKind::ExamSolution);
+    }
+
+    /// The folder is the real answer — that's what makes filing one drag.
+    #[test]
+    fn the_folder_a_file_sits_in_decides_its_kind() {
+        let base = Path::new("/Users/x/Documents/Retain/Biology");
+
+        assert_eq!(
+            kind_for(&base.join("Past papers/anything at all.pdf")),
+            ResourceKind::PastPaper
+        );
+        assert_eq!(
+            kind_for(&base.join("Study design/notes about exams.pdf")),
+            ResourceKind::StudyDesign,
+            "the folder must win over misleading words in the filename"
+        );
+        assert_eq!(
+            kind_for(&base.join("My notes/week 3.md")),
+            ResourceKind::PersonalNotes
+        );
+        assert_eq!(
+            kind_for(&base.join("Solutions and reports/2023.pdf")),
+            ResourceKind::ExamSolution
+        );
+
+        // Loose in the subject folder: fall back to the filename.
+        assert_eq!(kind_for(&base.join("2023 vcaa exam.pdf")), ResourceKind::PastPaper);
+    }
+
+    /// Ordering by authority is what stops a lucky keyword match in your own
+    /// notes outranking the study design paragraph that defines the term.
+    #[test]
+    fn the_study_design_outranks_your_own_notes() {
+        let mut kinds = [
+            ResourceKind::PersonalNotes,
+            ResourceKind::StudyDesign,
+            ResourceKind::SchoolNotes,
+            ResourceKind::ExamSolution,
+        ];
+        kinds.sort_by_key(|k| k.authority());
+
+        assert_eq!(kinds[0], ResourceKind::StudyDesign);
+        assert_eq!(kinds[1], ResourceKind::ExamSolution);
+        assert_eq!(kinds[3], ResourceKind::PersonalNotes);
     }
 
     #[test]
@@ -211,6 +314,20 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
+    }
+
+    #[test]
+    fn every_subject_gets_a_folder_per_kind_of_material() {
+        let conn = db();
+        let docs = tmp("kinds");
+        ensure(&conn, &docs).unwrap();
+
+        let bio = docs.join("Retain/Biology");
+        for name in ["Study design", "Past papers", "Solutions and reports", "School notes", "My notes"] {
+            assert!(bio.join(name).is_dir(), "missing {name}");
+        }
+        // "Other" is a fallback, not somewhere to file things.
+        assert!(!bio.join("Other").exists());
     }
 
     #[test]

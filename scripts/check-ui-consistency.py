@@ -18,6 +18,7 @@ ALLOWED_RADII = {
     "rounded-[var(--r-md)]",
     "rounded-[var(--r-lg)]",
     "rounded-[var(--r-xl)]",
+    "rounded-[3px]",    # 16px attachment thumbnails
     "rounded-[6px]",    # inline code
     "rounded-[7px]",    # checkboxes, genuinely smaller than the smallest token
     "rounded-[2.5px]",  # contribution-grid cells

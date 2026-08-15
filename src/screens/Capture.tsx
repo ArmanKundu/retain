@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { CornerDownLeft, Sparkle } from "lucide-react";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { CornerDownLeft, Paperclip, Sparkle, X } from "lucide-react";
 
 import { cx } from "../components/ui";
 
 import { api } from "../lib/api";
-import type { ParsedCapture } from "../lib/types";
+import type { NewCaptureAttachment, ParsedCapture } from "../lib/types";
 
 /**
  * The ⌘⇧Space capture bar.
@@ -25,6 +26,9 @@ export function Capture() {
   const [text, setText] = useState("");
   const [parsed, setParsed] = useState<ParsedCapture | null>(null);
   const [saving, setSaving] = useState(false);
+  // Screenshots and files ride along with the note. In class you have four
+  // seconds — a photo of the board beats typing "the thing about enzymes".
+  const [attachments, setAttachments] = useState<NewCaptureAttachment[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // This window shares the bundle but not the app's store, so it never ran
@@ -52,6 +56,7 @@ export function Capture() {
     const un = listen("capture:opened", () => {
       setText("");
       setParsed(null);
+      setAttachments([]);
       syncTheme();
       requestAnimationFrame(() => inputRef.current?.focus());
     });
@@ -83,17 +88,56 @@ export function Capture() {
 
   const save = useCallback(async () => {
     const value = text.trim();
-    if (!value || saving) return;
+    // An attachment alone is a valid capture — a screenshot of the board says
+    // plenty without a note.
+    if ((!value && attachments.length === 0) || saving) return;
+
     setSaving(true);
     try {
-      await api.saveCapture(value);
+      await api.saveCaptureWithAttachments(value || "(screenshot)", attachments);
       setText("");
       setParsed(null);
+      setAttachments([]);
       await api.hideCaptureWindow();
     } finally {
       setSaving(false);
     }
-  }, [text, saving]);
+  }, [text, saving, attachments]);
+
+  /** Pasted images become attachments; pasted text lands in the field. */
+  const onPaste = useCallback((e: React.ClipboardEvent) => {
+    const image = Array.from(e.clipboardData.files).find((f) => f.type.startsWith("image/"));
+    if (!image) return;
+
+    e.preventDefault();
+    const reader = new FileReader();
+    reader.onload = () =>
+      setAttachments((list) => [
+        ...list,
+        { name: image.name || "Screenshot", imageDataUrl: String(reader.result), text: null },
+      ]);
+    reader.readAsDataURL(image);
+  }, []);
+
+  /** Attach a document. Its text is extracted in Rust, same as the library. */
+  const attachFile = useCallback(async () => {
+    const picked = await openDialog({
+      multiple: true,
+      title: "Attach to this capture",
+      filters: [{ name: "Documents", extensions: ["pdf", "txt", "md", "png", "jpg", "jpeg"] }],
+    });
+    if (!picked) return;
+
+    for (const path of Array.isArray(picked) ? picked : [picked]) {
+      const outcome = await api.readFileText(path);
+      if (outcome.status === "extracted") {
+        setAttachments((list) => [
+          ...list,
+          { name: outcome.name, imageDataUrl: null, text: outcome.text },
+        ]);
+      }
+    }
+  }, []);
 
   const hasHint = !!parsed && (!!parsed.subjectName || !!parsed.dueOn);
 
@@ -107,6 +151,7 @@ export function Capture() {
     <div className="flex h-screen w-screen flex-col justify-center p-2">
       <div
         className="spotlight overflow-hidden rounded-[var(--r-xl)]"
+        onPaste={onPaste}
         onKeyDown={(e) => {
           if (e.key === "Escape") {
             e.preventDefault();
@@ -118,7 +163,9 @@ export function Capture() {
           }
         }}
       >
-        <div className="flex items-center gap-3 px-4 py-3">
+        {/* The whole bar drags except its controls — an undecorated window has
+            no title bar, so without this it's stuck where macOS put it. */}
+        <div className="spotlight-drag flex items-center gap-3 px-4 py-3">
           <Sparkle
             size={19}
             strokeWidth={1.9}
@@ -140,11 +187,20 @@ export function Capture() {
           {/* Appears only when there's something to save, so an empty bar is
               completely quiet — the same way Spotlight shows nothing until you
               type. */}
+          <button
+            onClick={() => void attachFile()}
+            title="Attach a screenshot or file"
+            aria-label="Attach a screenshot or file"
+            className="pressable shrink-0 rounded-[7px] p-1.5 text-[var(--ink-faint)] hover:bg-white/10 hover:text-[var(--ink)]"
+          >
+            <Paperclip size={15} />
+          </button>
+
           <kbd
             className={cx(
               "flex h-[22px] shrink-0 items-center rounded-[7px] border px-1.5",
               "font-mono text-[11px] transition-opacity duration-[var(--t-base)]",
-              text.trim()
+              text.trim() || attachments.length > 0
                 ? "border-white/15 bg-white/10 text-[var(--ink-dim)] opacity-100"
                 : "pointer-events-none border-transparent opacity-0",
             )}
@@ -152,6 +208,32 @@ export function Capture() {
             <CornerDownLeft size={11} />
           </kbd>
         </div>
+
+        {/* Attachments, shown so you can see what you actually grabbed. */}
+        {attachments.length > 0 && (
+          <div className="animate-rise flex flex-wrap gap-1.5 border-t border-white/10 px-4 py-2.5">
+            {attachments.map((a, i) => (
+              <span
+                key={`${a.name}-${i}`}
+                className="flex items-center gap-1.5 rounded-full border border-white/12 bg-white/8 px-2 py-1 text-[11.5px] text-[var(--ink-dim)]"
+              >
+                {a.imageDataUrl ? (
+                  <img src={a.imageDataUrl} alt="" className="h-4 w-4 rounded-[3px] object-cover" />
+                ) : (
+                  <Paperclip size={10} />
+                )}
+                <span className="max-w-[140px] truncate">{a.name}</span>
+                <button
+                  onClick={() => setAttachments((list) => list.filter((_, j) => j !== i))}
+                  aria-label={`Remove ${a.name}`}
+                  className="pressable text-[var(--ink-faint)] hover:text-[var(--ink)]"
+                >
+                  <X size={10} />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
 
         {/* The result row exists only once the parser has something to say,
             so the bar is a single line at rest and grows into two. That's the

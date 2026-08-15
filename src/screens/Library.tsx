@@ -47,10 +47,20 @@ const KIND_LABEL: Record<LibraryKind, string> = {
   cards: "Cards",
 };
 
+/**
+ * The filing system, in the order Retain trusts them.
+ *
+ * Order is not cosmetic: an answer reads the study design before your own
+ * notes, because the first says what's examinable and the second records what
+ * you understood at the time — which is the thing you're trying to correct.
+ */
 const RESOURCE_KINDS: { value: ResourceKind; label: string; hint: string }[] = [
-  { value: "study_design", label: "Study design", hint: "What's examinable" },
-  { value: "past_paper", label: "Past paper", hint: "How it gets asked" },
-  { value: "notes", label: "Notes", hint: "Yours or your teacher's" },
+  { value: "study_design", label: "Study design", hint: "What VCAA says is examinable" },
+  { value: "past_paper", label: "Past papers", hint: "Exams and SACs" },
+  { value: "exam_solution", label: "Solutions", hint: "Marking schemes, examiner's reports" },
+  { value: "school_notes", label: "School notes", hint: "From your teacher" },
+  { value: "personal_notes", label: "My notes", hint: "Your own" },
+  { value: "textbook", label: "Textbook", hint: "Chapters and extracts" },
   { value: "other", label: "Other", hint: "Anything else" },
 ];
 

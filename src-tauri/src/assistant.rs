@@ -281,10 +281,24 @@ pub fn app_context(conn: &Connection) -> String {
         }
     }
 
-    if lines.is_empty() {
+    // Committed time, so "what should I do tonight?" accounts for the fact
+    // that tonight might already be spoken for.
+    let commitments = crate::blocks::week_summary(conn, crate::util::retain_today_naive())
+        .unwrap_or_default();
+
+    if lines.is_empty() && commitments.is_empty() {
         return String::new();
     }
-    format!("--- The student's Retain data ---\n{}\n", lines.join("\n"))
+
+    let mut out = String::new();
+    if !lines.is_empty() {
+        out.push_str(&format!("--- The student's Retain data ---\n{}\n", lines.join("\n")));
+    }
+    if !commitments.is_empty() {
+        out.push('\n');
+        out.push_str(&commitments);
+    }
+    out
 }
 
 /// Build the user-side prompt for one turn.

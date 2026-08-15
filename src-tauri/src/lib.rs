@@ -15,6 +15,7 @@ mod provider;
 mod resources;
 mod ai;
 mod biology;
+mod blocks;
 mod ics;
 mod library;
 mod anki_import;
@@ -204,6 +205,13 @@ pub fn run() {
             commands::ai_suggest_category,
             commands::discard_session,
             commands::day_detail,
+            commands::save_capture_with_attachments,
+            commands::capture_attachments,
+            commands::list_blocks,
+            commands::blocks_for_date,
+            commands::create_block,
+            commands::update_block,
+            commands::delete_block,
             commands::preview_intervals,
             // Resources and the saved-output library.
             commands::list_resources,

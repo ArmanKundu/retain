@@ -567,7 +567,14 @@ export interface IntervalPreview {
 
 // --- Your material, and what the AI made from it -----------------------------
 
-export type ResourceKind = "study_design" | "past_paper" | "notes" | "other";
+export type ResourceKind =
+  | "study_design"
+  | "past_paper"
+  | "exam_solution"
+  | "school_notes"
+  | "personal_notes"
+  | "textbook"
+  | "other";
 
 export interface Resource {
   id: number;
@@ -708,4 +715,63 @@ export interface DayDetail {
   qualified: boolean;
   bySubject: DaySubject[];
   notes: string[];
+}
+
+// --- Time blocks: when you can't study ---------------------------------------
+
+export type BlockKind =
+  | "class"
+  | "tuition"
+  | "work"
+  | "commute"
+  | "exercise"
+  | "family"
+  | "rest"
+  | "other";
+
+export interface TimeBlock {
+  id: number;
+  title: string;
+  kind: BlockKind;
+  /** 0 = Monday. Set for a weekly commitment. */
+  weekday: number | null;
+  /** Set for a one-off. */
+  onDate: string | null;
+  /** Minutes from local midnight. */
+  startMin: number;
+  endMin: number;
+  /** Whether study can happen here — a class you can revise through, say. */
+  available: boolean;
+  subjectId: number | null;
+  subjectName: string | null;
+  colour: string | null;
+  note: string | null;
+}
+
+export interface NewBlock {
+  title: string;
+  kind: BlockKind;
+  weekday: number | null;
+  onDate: string | null;
+  startMin: number;
+  endMin: number;
+  available: boolean;
+  subjectId: number | null;
+  note: string | null;
+}
+
+/** Something attached to a quick capture — a screenshot, or a file's text. */
+export interface NewCaptureAttachment {
+  name: string;
+  /** `data:image/...;base64,...` for a pasted or dropped image. */
+  imageDataUrl: string | null;
+  text: string | null;
+}
+
+export interface CaptureAttachment {
+  id: number;
+  name: string;
+  kind: "image" | "text";
+  imageDataUrl: string | null;
+  text: string | null;
 }

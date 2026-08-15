@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { BarChart3, BookMarked, CalendarClock, ClipboardList, Dna, Home, Inbox as InboxIcon, Layers, MessageSquare, Settings as SettingsIcon, Timer as TimerIcon } from "lucide-react";
+import { BarChart3, BookMarked, CalendarClock, CalendarDays, ClipboardList, Dna, Home, Inbox as InboxIcon, Layers, MessageSquare, Settings as SettingsIcon, Timer as TimerIcon } from "lucide-react";
 
 import { Onboarding } from "./screens/Onboarding";
 import { Today } from "./screens/Today";
@@ -12,6 +12,7 @@ import { Inbox } from "./screens/Inbox";
 import { Assessments } from "./screens/Assessments";
 import { Biology } from "./screens/Biology";
 import { Assistant } from "./screens/Assistant";
+import { Week } from "./screens/Week";
 import { Library } from "./screens/Library";
 import { Progress } from "./screens/Progress";
 import { Settings } from "./screens/Settings";
@@ -37,6 +38,7 @@ const NAV_GROUPS: { heading: string; items: NavItem[] }[] = [
     items: [
   { route: "today", label: "Today", Icon: Home },
   { route: "timer", label: "Timer", Icon: TimerIcon },
+  { route: "week", label: "Week", Icon: CalendarDays },
   { route: "inbox", label: "Inbox", Icon: InboxIcon },
   { route: "review", label: "Review", Icon: Layers },
     ],
@@ -202,6 +204,7 @@ export default function App() {
         <div className="flex-1">
         {route === "today" && <Today />}
         {route === "timer" && <TimerScreen onFinished={setJustFinished} />}
+        {route === "week" && <Week />}
         {route === "review" && <Review onImport={() => setRoute("import")} />}
         {route === "import" && <ImportScreen onDone={() => setRoute("review")} />}
         {route === "inbox" && <Inbox />}

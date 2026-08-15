@@ -99,8 +99,8 @@ fn an_empty_or_image_only_file_is_refused_with_a_useful_message() {
 #[test]
 fn resources_can_be_filtered_by_subject() {
     let mut conn = db();
-    add(&mut conn, Some(1), "Bio", ResourceKind::Notes, None, "mitochondria", now()).unwrap();
-    add(&mut conn, Some(2), "Chem", ResourceKind::Notes, None, "titration", now()).unwrap();
+    add(&mut conn, Some(1), "Bio", ResourceKind::SchoolNotes, None, "mitochondria", now()).unwrap();
+    add(&mut conn, Some(2), "Chem", ResourceKind::SchoolNotes, None, "titration", now()).unwrap();
 
     assert_eq!(list(&conn, Some(1)).unwrap().len(), 1);
     assert_eq!(list(&conn, Some(2)).unwrap().len(), 1);
@@ -112,7 +112,7 @@ fn resources_can_be_filtered_by_subject() {
 #[test]
 fn a_question_finds_the_relevant_excerpt() {
     let mut conn = db();
-    add(&mut conn, Some(1), "Notes", ResourceKind::Notes, None,
+    add(&mut conn, Some(1), "Notes", ResourceKind::SchoolNotes, None,
         "Photosynthesis occurs in the chloroplast.\n\nRespiration occurs in the mitochondria.\n\n\
          Protein synthesis begins with transcription in the nucleus.",
         now()).unwrap();
@@ -127,7 +127,7 @@ fn a_question_finds_the_relevant_excerpt() {
 #[test]
 fn punctuation_in_a_question_does_not_break_the_query() {
     let mut conn = db();
-    add(&mut conn, Some(1), "Notes", ResourceKind::Notes, None,
+    add(&mut conn, Some(1), "Notes", ResourceKind::SchoolNotes, None,
         "The cell's membrane is semi-permeable.", now()).unwrap();
 
     for q in [
@@ -143,7 +143,7 @@ fn punctuation_in_a_question_does_not_break_the_query() {
 #[test]
 fn a_question_of_only_stopwords_retrieves_nothing_rather_than_everything() {
     let mut conn = db();
-    add(&mut conn, Some(1), "Notes", ResourceKind::Notes, None, "Anything at all.", now()).unwrap();
+    add(&mut conn, Some(1), "Notes", ResourceKind::SchoolNotes, None, "Anything at all.", now()).unwrap();
 
     assert!(to_match_query("what is it and how do you do that").is_none());
     assert!(search(&conn, "what is it", None, 5).unwrap().is_empty());
@@ -152,8 +152,8 @@ fn a_question_of_only_stopwords_retrieves_nothing_rather_than_everything() {
 #[test]
 fn retrieval_can_be_scoped_to_one_subject() {
     let mut conn = db();
-    add(&mut conn, Some(1), "Bio", ResourceKind::Notes, None, "enzyme catalysis in cells", now()).unwrap();
-    add(&mut conn, Some(2), "Chem", ResourceKind::Notes, None, "enzyme catalysis in industry", now()).unwrap();
+    add(&mut conn, Some(1), "Bio", ResourceKind::SchoolNotes, None, "enzyme catalysis in cells", now()).unwrap();
+    add(&mut conn, Some(2), "Chem", ResourceKind::SchoolNotes, None, "enzyme catalysis in industry", now()).unwrap();
 
     assert_eq!(search(&conn, "enzyme catalysis", None, 10).unwrap().len(), 2);
     let bio = search(&conn, "enzyme catalysis", Some(1), 10).unwrap();
@@ -201,8 +201,12 @@ fn the_context_block_labels_each_source_by_kind() {
     ];
 
     let block = context_block(&excerpts).unwrap();
-    assert!(block.contains("From the study design (VCAA study design)"));
-    assert!(block.contains("From a past exam (2023 exam)"));
+    // The label now states what authority the source carries, not just where it
+    // came from — that distinction is the point of the taxonomy.
+    assert!(block.contains("authoritative on what is examinable"));
+    assert!(block.contains("VCAA study design"));
+    assert!(block.contains("From a past exam paper"));
+    assert!(block.contains("2023 exam"));
     assert!(block.contains("dot point text"));
     // The model is told the material outranks its own memory.
     assert!(block.contains("authoritative"));

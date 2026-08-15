@@ -22,7 +22,7 @@ use crate::models::*;
 use crate::timer::{self, ActiveTimer, SharedTimer};
 use crate::tray::TrayHandles;
 use crate::scheduler;
-use crate::{ai, assessments, assistant, biology, ics, ingest, library, resources, update, workspace, cards, errors, export, inbox, notifications, provider, secrets, settings, streak, subjects};
+use crate::{ai, assessments, assistant, biology, blocks, capture, ics, ingest, library, resources, update, workspace, cards, errors, export, inbox, notifications, provider, secrets, settings, streak, subjects};
 
 /// Shared state, created in `lib.rs` and handed to every command.
 pub struct AppState {
@@ -1167,7 +1167,9 @@ pub async fn ai_practice_question(
     let (client, model, context, excerpts) = {
         let conn = db(&state);
         let client = ai::Ai::from(&conn)?;
-        let found = resources::search(&conn, &dot_point, subject_id, 4).unwrap_or_default();
+        let found = resources::by_authority(
+            resources::search(&conn, &dot_point, subject_id, 4).unwrap_or_default(),
+        );
         let block = resources::context_block(&found);
         (client, client_model(&conn), block, found)
     };
@@ -1230,7 +1232,9 @@ pub async fn ai_notes(
     let (client, model, context, excerpts) = {
         let conn = db(&state);
         let client = ai::Ai::from(&conn)?;
-        let found = resources::search(&conn, &topic, subject_id, 5).unwrap_or_default();
+        let found = resources::by_authority(
+            resources::search(&conn, &topic, subject_id, 5).unwrap_or_default(),
+        );
         let block = resources::context_block(&found);
         (client, client_model(&conn), block, found)
     };
@@ -1820,7 +1824,7 @@ pub fn import_folder(
                 &mut conn,
                 subject_id,
                 &workspace::title_from_filename(&name),
-                workspace::guess_kind(&name),
+                workspace::kind_for(&file),
                 Some(&name),
                 text,
                 Some(&file.to_string_lossy()),
@@ -1919,9 +1923,10 @@ pub async fn ask_assistant(
         let client = ai::Ai::from(&conn)?;
         let model = client_model(&conn);
 
-        let excerpts =
+        let excerpts = resources::by_authority(
             resources::search(&conn, &question, convo.subject_id, assistant::RETRIEVE)
-                .unwrap_or_default();
+                .unwrap_or_default(),
+        );
         let app_data = assistant::app_context(&conn);
 
         let prompt = assistant::build_prompt(
@@ -2079,4 +2084,224 @@ pub fn day_detail(state: State<'_, AppState>, local_date: String) -> CmdResult<D
         by_subject,
         notes,
     })
+}
+
+// ---------------------------------------------------------------------------
+// Time blocks — when you can't study
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn list_blocks(state: State<'_, AppState>) -> CmdResult<Vec<blocks::TimeBlock>> {
+    Ok(blocks::all(&db(&state))?)
+}
+
+/// Blocks that apply on one date: its weekly ones plus anything dated to it.
+#[tauri::command]
+pub fn blocks_for_date(
+    state: State<'_, AppState>,
+    local_date: String,
+) -> CmdResult<Vec<blocks::TimeBlock>> {
+    let date = local_date
+        .parse::<chrono::NaiveDate>()
+        .map_err(|_| CommandError("That isn't a date.".into()))?;
+    Ok(blocks::for_date(&db(&state), date)?)
+}
+
+#[tauri::command]
+pub fn create_block(state: State<'_, AppState>, block: blocks::NewBlock) -> CmdResult<i64> {
+    Ok(blocks::create(&db(&state), &block, chrono::Utc::now())?)
+}
+
+#[tauri::command]
+pub fn update_block(
+    state: State<'_, AppState>,
+    id: i64,
+    block: blocks::NewBlock,
+) -> CmdResult<()> {
+    Ok(blocks::update(&db(&state), id, &block)?)
+}
+
+#[tauri::command]
+pub fn delete_block(state: State<'_, AppState>, id: i64) -> CmdResult<()> {
+    Ok(blocks::delete(&db(&state), id)?)
+}
+
+/// A screenshot or file attached to a capture.
+///
+/// Images arrive as a base64 data URL from the webview's paste handler and are
+/// stored as bytes. Text arrives already extracted by `ingest`.
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NewCaptureAttachment {
+    pub name: String,
+    /// A `data:image/...;base64,...` URL, for a pasted or dropped image.
+    pub image_data_url: Option<String>,
+    pub text: Option<String>,
+}
+
+/// Save a capture with anything attached to it.
+///
+/// One command rather than save-then-attach: a capture is meant to take four
+/// seconds, and a two-step write that can half-fail would leave a screenshot
+/// with no note or a note with no screenshot.
+#[tauri::command]
+pub fn save_capture_with_attachments(
+    state: State<'_, AppState>,
+    text: String,
+    attachments: Vec<NewCaptureAttachment>,
+) -> CmdResult<i64> {
+    let mut conn = state.db.lock().expect("database mutex poisoned");
+    let now = chrono::Utc::now();
+
+    let subjects: Vec<capture::SubjectHint> = subjects::list(&conn, false)?
+        .into_iter()
+        .map(|s| capture::SubjectHint { id: s.id, name: s.name })
+        .collect();
+
+    let tx = conn.transaction()?;
+    let parsed = capture::parse(&text, &subjects, crate::util::retain_today_naive());
+
+    tx.execute(
+        "INSERT INTO captures
+           (raw_text, created_at, local_date, suggested_subject_id, suggested_due_on, suggested_title)
+         VALUES (?1,?2,?3,?4,?5,?6)",
+        rusqlite::params![
+            text,
+            crate::util::rfc3339(now),
+            crate::util::retain_today(),
+            parsed.subject_id,
+            parsed.due_on,
+            parsed.title,
+        ],
+    )?;
+    let id = tx.last_insert_rowid();
+
+    {
+        let mut stmt = tx.prepare(
+            "INSERT INTO capture_attachments (capture_id, name, kind, image, text, created_at)
+             VALUES (?1,?2,?3,?4,?5,?6)",
+        )?;
+
+        for a in &attachments {
+            if let Some(url) = &a.image_data_url {
+                // Strip the `data:…;base64,` prefix; anything else is not an
+                // image we put in the database.
+                let Some(b64) = url.split(",").nth(1) else { continue };
+                let Ok(bytes) = decode_base64(b64) else { continue };
+                stmt.execute(rusqlite::params![
+                    id,
+                    a.name,
+                    "image",
+                    bytes,
+                    None::<String>,
+                    crate::util::rfc3339(now)
+                ])?;
+            } else if let Some(t) = &a.text {
+                if t.trim().is_empty() {
+                    continue;
+                }
+                stmt.execute(rusqlite::params![
+                    id,
+                    a.name,
+                    "text",
+                    None::<Vec<u8>>,
+                    t,
+                    crate::util::rfc3339(now)
+                ])?;
+            }
+        }
+    }
+
+    tx.commit()?;
+    Ok(id)
+}
+
+/// Decode standard base64. Hand-rolled to avoid a dependency for one use.
+fn decode_base64(input: &str) -> Result<Vec<u8>, ()> {
+    const TABLE: &[u8; 64] =
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+    let mut lookup = [255u8; 256];
+    for (i, c) in TABLE.iter().enumerate() {
+        lookup[*c as usize] = i as u8;
+    }
+
+    let mut out = Vec::with_capacity(input.len() / 4 * 3);
+    let mut buffer = 0u32;
+    let mut bits = 0u32;
+
+    for byte in input.bytes() {
+        if byte == b'=' || byte.is_ascii_whitespace() {
+            continue;
+        }
+        let value = lookup[byte as usize];
+        if value == 255 {
+            return Err(());
+        }
+        buffer = (buffer << 6) | value as u32;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((buffer >> bits) as u8);
+        }
+    }
+
+    Ok(out)
+}
+
+/// Attachment names on a capture, so triage can show what came with it.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CaptureAttachment {
+    pub id: i64,
+    pub name: String,
+    pub kind: String,
+    /// Present for images, as a data URL ready to render.
+    pub image_data_url: Option<String>,
+    pub text: Option<String>,
+}
+
+#[tauri::command]
+pub fn capture_attachments(
+    state: State<'_, AppState>,
+    capture_id: i64,
+) -> CmdResult<Vec<CaptureAttachment>> {
+    let conn = db(&state);
+    let mut stmt = conn.prepare(
+        "SELECT id, name, kind, image, text FROM capture_attachments
+          WHERE capture_id = ?1 ORDER BY id",
+    )?;
+
+    let rows = stmt
+        .query_map([capture_id], |r| {
+            let kind: String = r.get(2)?;
+            let image: Option<Vec<u8>> = r.get(3)?;
+            Ok(CaptureAttachment {
+                id: r.get(0)?,
+                name: r.get(1)?,
+                image_data_url: image.map(|b| format!("data:image/png;base64,{}", encode_base64(&b))),
+                text: r.get(4)?,
+                kind,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(rows)
+}
+
+fn encode_base64(bytes: &[u8]) -> String {
+    const TABLE: &[u8; 64] =
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let n = ((b[0] as u32) << 16) | ((b[1] as u32) << 8) | b[2] as u32;
+
+        out.push(TABLE[(n >> 18 & 63) as usize] as char);
+        out.push(TABLE[(n >> 12 & 63) as usize] as char);
+        out.push(if chunk.len() > 1 { TABLE[(n >> 6 & 63) as usize] as char } else { '=' });
+        out.push(if chunk.len() > 2 { TABLE[(n & 63) as usize] as char } else { '=' });
+    }
+    out
 }

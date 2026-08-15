@@ -3,6 +3,7 @@ import { Check, Layers, Plus } from "lucide-react";
 
 import { CardAnswer, CardQuestion } from "../components/CardFace";
 import { Button, Card, ColourDot, cx } from "../components/ui";
+import { HintLadder, ModePicker, WriteAnswer, type StudyMode } from "../components/StudyModes";
 import { api } from "../lib/api";
 import type {
   IntervalPreview, AnswerResult, QueueCounts, QueueItem, Rating } from "../lib/types";
@@ -56,6 +57,9 @@ export function Review({ onImport }: { onImport: () => void }) {
   const [index, setIndex] = useState(0);
   const [counts, setCounts] = useState<QueueCounts | null>(null);
   const [revealed, setRevealed] = useState(false);
+  // The mode persists across cards within a session — switching it per card
+  // would make it a chore rather than a choice.
+  const [mode, setMode] = useState<StudyMode>("flip");
   const [subjectFilter, setSubjectFilter] = useState<number | null>(null);
   const [last, setLast] = useState<{ rating: Rating; next: string } | null>(null);
   const [intervals, setIntervals] = useState<IntervalPreview[] | null>(null);
@@ -151,7 +155,10 @@ export function Review({ onImport }: { onImport: () => void }) {
       const target = e.target as HTMLElement | null;
       if (target && ["INPUT", "TEXTAREA"].includes(target.tagName)) return;
 
-      if (!revealed && (e.code === "Space" || e.code === "Enter")) {
+      // Space reveals in flip mode only. In write and hint mode the whole
+      // point is the step before the answer, and a shortcut that skips it
+      // turns them back into flip with extra clicks.
+      if (!revealed && mode === "flip" && (e.code === "Space" || e.code === "Enter")) {
         e.preventDefault();
         reveal();
         return;
@@ -166,7 +173,7 @@ export function Review({ onImport }: { onImport: () => void }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [revealed, reveal, answer]);
+  }, [revealed, reveal, answer, mode]);
 
   const totalWaiting = useMemo(
     () => (counts ? counts.dueReviews + counts.newAvailable : 0),
@@ -242,29 +249,53 @@ export function Review({ onImport }: { onImport: () => void }) {
             <span>{STATE_LABEL[card.state] ?? card.state}</span>
             {card.noteType === "cloze" && <span>· Cloze</span>}
             {card.noteType === "quote" && <span>· Quote</span>}
-            <span className="tabular ml-auto">
-              {index + 1} / {queue.length}
-            </span>
+            <div className="ml-auto flex items-center gap-3">
+              <ModePicker mode={mode} onChange={setMode} />
+              <span className="tabular">
+                {index + 1} / {queue.length}
+              </span>
+            </div>
           </div>
 
           <div className="mt-7 flex flex-1 flex-col justify-center">
             <CardQuestion card={card} />
 
-            {/* The answer is revealed, not swapped in: the question stays put
-                and the answer rises into place beneath it. */}
+            {/* The answer turns into place rather than fading in — a card has
+                two sides, and a crossfade makes it a div whose contents
+                changed. Reduced motion gets the state change without the
+                rotation. */}
             {revealed && (
-              <div className="animate-rise mt-7 border-t border-[var(--line-soft)] pt-7">
-                <CardAnswer card={card} />
+              <div className="flip-scene mt-7 border-t border-[var(--line-soft)] pt-7">
+                <div className="flip-inner is-flipped">
+                  <div className="flip-face is-back">
+                    <CardAnswer card={card} />
+                  </div>
+                  {/* The front face is what the rotation turns away from; it
+                      holds the layout height while the back is absolute. */}
+                  <div className="flip-face invisible" aria-hidden>
+                    <CardAnswer card={card} />
+                  </div>
+                </div>
               </div>
             )}
           </div>
 
           <div className="mt-7 shrink-0">
             {!revealed ? (
-              <Button size="lg" variant="primary" className="w-full" onClick={reveal}>
-                Reveal answer
-                <span className="ml-1 text-[11px] opacity-60">Space</span>
-              </Button>
+              mode === "write" ? (
+                <WriteAnswer
+                  key={card.cardId}
+                  expected={card.back}
+                  onSubmitted={reveal}
+                />
+              ) : mode === "hint" ? (
+                <HintLadder key={card.cardId} answer={card.back} onExhausted={reveal} />
+              ) : (
+                <Button size="lg" variant="primary" className="w-full" onClick={reveal}>
+                  Reveal answer
+                  <span className="ml-1 text-[11px] opacity-60">Space</span>
+                </Button>
+              )
             ) : (
               <div className="animate-rise grid grid-cols-4 gap-2">
                 {RATINGS.map((r) => {

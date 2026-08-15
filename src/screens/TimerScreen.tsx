@@ -4,25 +4,21 @@ import { Coffee, Pause, Play, Square } from "lucide-react";
 import { api } from "../lib/api";
 import { clock, duration } from "../lib/format";
 import type { FinishedSession, TimerMode } from "../lib/types";
-import { Button, Card, ColourDot, Segmented, cx } from "../components/ui";
+import { Button, Card, ColourDot, cx } from "../components/ui";
 import { useApp } from "../store";
-
-const PRESETS = [
-  { label: "25 / 5", work: 25, break: 5 },
-  { label: "50 / 10", work: 50, break: 10 },
-];
 
 export function TimerScreen({
   onFinished,
 }: {
   onFinished: (s: FinishedSession) => void;
 }) {
-  const { subjects, timer, setTimer, boot } = useApp();
+  const { subjects, timer, setTimer } = useApp();
 
   const [subjectId, setSubjectId] = useState<number | null>(subjects[0]?.id ?? null);
-  const [mode, setMode] = useState<TimerMode>("stopwatch");
-  const [work, setWork] = useState(boot?.pomodoroWorkMinutes ?? 25);
-  const [brk, setBrk] = useState(boot?.pomodoroBreakMinutes ?? 5);
+  // One clock. Pomodoro was removed — a fixed 25/5 rhythm is a different
+  // product, and the idle detector already handles the "am I actually
+  // working?" question it was there to answer.
+  const mode: TimerMode = "stopwatch";
   const [error, setError] = useState<string | null>(null);
 
   const start = async () => {
@@ -34,8 +30,8 @@ export function TimerScreen({
           subjectId,
           topicId: null,
           mode,
-          workMinutes: mode === "pomodoro" ? work : null,
-          breakMinutes: mode === "pomodoro" ? brk : null,
+          workMinutes: null,
+          breakMinutes: null,
         }),
       );
     } catch (e) {
@@ -173,50 +169,6 @@ export function TimerScreen({
               ))}
             </div>
 
-            <div className="mt-5 text-[11px] font-semibold uppercase tracking-[0.07em] text-[var(--ink-faint)]">
-              Mode
-            </div>
-            <div className="mt-2.5">
-              <Segmented
-                value={mode}
-                onChange={setMode}
-                options={[
-                  { value: "stopwatch", label: "Stopwatch" },
-                  { value: "pomodoro", label: "Pomodoro" },
-                ]}
-              />
-            </div>
-
-            {mode === "pomodoro" && (
-              <div className="animate-in mt-4">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {PRESETS.map((p) => (
-                    <button
-                      key={p.label}
-                      onClick={() => {
-                        setWork(p.work);
-                        setBrk(p.break);
-                      }}
-                      className={cx(
-                        "rounded-full border px-3 py-1.5 text-[12.5px] transition-all duration-[120ms]",
-                        work === p.work && brk === p.break
-                          ? "border-[var(--ink-faint)] bg-[var(--surface-hi)] text-[var(--ink)]"
-                          : "border-[var(--line)] text-[var(--ink-dim)] hover:border-[var(--ink-faint)]",
-                      )}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                  <div className="flex items-center gap-1.5 text-[12.5px] text-[var(--ink-faint)]">
-                    <NumberBox value={work} onChange={setWork} min={1} max={180} />
-                    <span>/</span>
-                    <NumberBox value={brk} onChange={setBrk} min={1} max={60} />
-                    <span>min</span>
-                  </div>
-                </div>
-              </div>
-            )}
-
             <p className="mt-5 border-t border-[var(--line-soft)] pt-4 text-[12px] leading-relaxed text-[var(--ink-faint)]">
               Topic tagging arrives with the VCAA topic tree, in a later checkpoint.
             </p>
@@ -240,28 +192,3 @@ export function TimerScreen({
   );
 }
 
-function NumberBox({
-  value,
-  onChange,
-  min,
-  max,
-}: {
-  value: number;
-  onChange: (v: number) => void;
-  min: number;
-  max: number;
-}) {
-  return (
-    <input
-      type="number"
-      value={value}
-      min={min}
-      max={max}
-      onChange={(e) => {
-        const n = Number(e.target.value);
-        if (!Number.isNaN(n)) onChange(Math.min(max, Math.max(min, n)));
-      }}
-      className="tabular h-7 w-[52px] rounded-[var(--r-sm)] border border-[var(--line)] bg-[var(--surface-hi)] px-2 text-center text-[12.5px] text-[var(--ink)]"
-    />
-  );
-}

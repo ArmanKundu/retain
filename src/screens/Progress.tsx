@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { Flame, Shield } from "lucide-react";
 
 import { ContributionGrid } from "../components/ContributionGrid";
+import { DayDetailSheet } from "../components/DayDetailSheet";
 import { GoalRing } from "../components/GoalRing";
 import { WeeklyReview } from "../components/WeeklyReview";
 import { Card, Empty, SectionTitle } from "../components/ui";
@@ -8,6 +10,7 @@ import { WEEKDAY_LABELS, duration } from "../lib/format";
 import { useApp } from "../store";
 
 export function Progress() {
+  const [openDay, setOpenDay] = useState<string | null>(null);
   const { grid, streak, rings, setRoute } = useApp();
 
   const totalMinutes = grid.reduce((sum, d) => sum + d.minutes, 0);
@@ -27,7 +30,7 @@ export function Progress() {
       </header>
 
       <Card className="animate-in mb-5 p-5">
-        <ContributionGrid days={grid} />
+        <ContributionGrid days={grid} onSelect={setOpenDay} />
       </Card>
 
       {streak && (
@@ -90,6 +93,8 @@ export function Progress() {
       </section>
 
       <WeeklyReview onOpenSettings={() => setRoute("settings")} />
+
+      {openDay && <DayDetailSheet date={openDay} onClose={() => setOpenDay(null)} />}
     </div>
   );
 }

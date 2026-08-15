@@ -691,3 +691,21 @@ export interface NewAttachment {
   name: string;
   content: string;
 }
+
+/** How one day was actually spent — the question the grid always prompted. */
+export interface DaySubject {
+  subjectId: number;
+  subjectName: string;
+  colour: string;
+  minutes: number;
+  sessions: number;
+}
+
+export interface DayDetail {
+  localDate: string;
+  totalMinutes: number;
+  sessionCount: number;
+  qualified: boolean;
+  bySubject: DaySubject[];
+  notes: string[];
+}

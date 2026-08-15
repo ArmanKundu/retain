@@ -27,6 +27,7 @@ import type {
   CalendarEvent,
   CalendarStatus,
   CommandWord,
+  DayDetail,
   DeckSummary,
   ChatMessage,
   Conversation,
@@ -98,8 +99,12 @@ export const api = {
   resumeTimer: () => invoke<TimerSnapshot | null>("resume_timer"),
   stopTimer: () => invoke<FinishedSession | null>("stop_timer"),
   getTimer: () => invoke<TimerSnapshot | null>("get_timer"),
+  /** Delete a just-finished session. Only works once it has ended. */
+  discardSession: (sessionId: number) => invoke<void>("discard_session", { sessionId }),
   setSessionNote: (sessionId: number, note: string | null) =>
     invoke<void>("set_session_note", { sessionId, note }),
+  /** Per-subject breakdown for one day. */
+  dayDetail: (localDate: string) => invoke<DayDetail>("day_detail", { localDate }),
   recentSessions: (limit = 12) => invoke<RecentSession[]>("recent_sessions", { limit }),
 
   // --- grid, streak, goals ---

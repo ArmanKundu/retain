@@ -1973,3 +1973,110 @@ pub fn conversation_markdown(
         .ok_or_else(|| CommandError("That conversation no longer exists.".into()))?;
     Ok(assistant::to_markdown(&convo, &assistant::messages(&conn, conversation_id)?)?)
 }
+
+/// Throw a just-finished session away instead of logging it.
+///
+/// The stop dialog offers this because not every timer run is study: you start
+/// one, get pulled away, and come back to twenty minutes that would quietly
+/// inflate your week. A tracker you don't trust is one you stop reading, so
+/// discarding has to be as easy as keeping.
+///
+/// Only a session that has already ended can be discarded, and its pauses go
+/// with it — a half-deleted session would leave orphaned pause rows skewing the
+/// active-time sums.
+#[tauri::command]
+pub fn discard_session(state: State<'_, AppState>, session_id: i64) -> CmdResult<()> {
+    let mut conn = state.db.lock().expect("database mutex poisoned");
+    let tx = conn.transaction()?;
+
+    let ended: Option<String> = tx
+        .query_row("SELECT ended_at FROM sessions WHERE id = ?1", [session_id], |r| r.get(0))
+        .map_err(|_| CommandError("That session no longer exists.".into()))?;
+
+    if ended.is_none() {
+        return Err(CommandError("That session is still running.".into()));
+    }
+
+    tx.execute("DELETE FROM session_pauses WHERE session_id = ?1", [session_id])?;
+    tx.execute("DELETE FROM sessions WHERE id = ?1", [session_id])?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// How one day was actually spent, broken down by subject.
+///
+/// The contribution grid shows *how much*; this answers *on what*. Clicking a
+/// day and seeing "Biology 40m, Methods 25m" is the question the grid always
+/// prompted and never answered.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DaySubject {
+    pub subject_id: i64,
+    pub subject_name: String,
+    pub colour: String,
+    pub minutes: i64,
+    pub sessions: i64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DayDetail {
+    pub local_date: String,
+    pub total_minutes: i64,
+    pub session_count: i64,
+    pub qualified: bool,
+    pub by_subject: Vec<DaySubject>,
+    /// Notes written that day, so a day is legible months later.
+    pub notes: Vec<String>,
+}
+
+#[tauri::command]
+pub fn day_detail(state: State<'_, AppState>, local_date: String) -> CmdResult<DayDetail> {
+    let conn = db(&state);
+
+    let by_subject: Vec<DaySubject> = conn
+        .prepare(
+            "SELECT s.id, s.name, s.colour,
+                    COALESCE(SUM(x.active_seconds), 0) / 60, COUNT(x.id)
+               FROM sessions x JOIN subjects s ON s.id = x.subject_id
+              WHERE x.local_date = ?1 AND x.ended_at IS NOT NULL
+              GROUP BY s.id ORDER BY 4 DESC, s.sort_order",
+        )?
+        .query_map([&local_date], |r| {
+            Ok(DaySubject {
+                subject_id: r.get(0)?,
+                subject_name: r.get(1)?,
+                colour: r.get(2)?,
+                minutes: r.get(3)?,
+                sessions: r.get(4)?,
+            })
+        })?
+        .collect::<Result<_, _>>()?;
+
+    let notes: Vec<String> = conn
+        .prepare(
+            "SELECT note FROM sessions
+              WHERE local_date = ?1 AND note IS NOT NULL AND TRIM(note) != ''
+              ORDER BY started_at",
+        )?
+        .query_map([&local_date], |r| r.get(0))?
+        .collect::<Result<_, _>>()?;
+
+    let total_minutes = by_subject.iter().map(|s| s.minutes).sum();
+    let session_count = by_subject.iter().map(|s| s.sessions).sum();
+
+    Ok(DayDetail {
+        // A day counts if it met the threshold or cleared its reviews — the
+        // same rule the streak uses, read from the same place rather than
+        // re-derived here where it could drift.
+        qualified: settings::focused_session_minutes(&conn)
+            .and_then(|threshold| streak::qualifying_days(&conn, threshold))
+            .map(|days| days.contains(&local_date))
+            .unwrap_or(false),
+        local_date,
+        total_minutes,
+        session_count,
+        by_subject,
+        notes,
+    })
+}

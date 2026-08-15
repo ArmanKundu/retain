@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 
+import { cx } from "./ui";
+
 import { addDays, duration, localDate, prettyDate } from "../lib/format";
 import type { GridDay } from "../lib/types";
 import { ColourDot } from "./ui";
@@ -16,7 +18,14 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
  * nothing and turns the grid from "how much" into "how much, and on what" — you
  * can see a fortnight of nothing but Biology at a glance.
  */
-export function ContributionGrid({ days }: { days: GridDay[] }) {
+export function ContributionGrid({
+  days,
+  onSelect,
+}: {
+  days: GridDay[];
+  /** Clicking a day opens its breakdown. Optional — the grid still works alone. */
+  onSelect?: (date: string) => void;
+}) {
   const [hovered, setHovered] = useState<{ day: GridDay; x: number; y: number } | null>(null);
 
   const byDate = useMemo(() => new Map(days.map((d) => [d.date, d])), [days]);
@@ -89,16 +98,30 @@ export function ContributionGrid({ days }: { days: GridDay[] }) {
                 {week.map((date) => {
                   const day = byDate.get(date);
                   const future = date > today;
+                  const clickable = !!day && !future && !!onSelect;
                   return (
                     <div
                       key={date}
+                      role={clickable ? "button" : undefined}
+                      tabIndex={clickable ? 0 : undefined}
+                      aria-label={clickable ? `See ${date}` : undefined}
+                      onClick={() => clickable && onSelect(date)}
+                      onKeyDown={(e) => {
+                        if (clickable && (e.key === "Enter" || e.key === " ")) {
+                          e.preventDefault();
+                          onSelect(date);
+                        }
+                      }}
                       onMouseEnter={(e) => {
                         if (!day) return;
                         const r = e.currentTarget.getBoundingClientRect();
                         setHovered({ day, x: r.left + r.width / 2, y: r.top });
                       }}
                       onMouseLeave={() => setHovered(null)}
-                      className="rounded-[2.5px] transition-transform duration-100 hover:scale-[1.35]"
+                      className={cx(
+                        "rounded-[2.5px] transition-transform duration-100 hover:scale-[1.35]",
+                        clickable && "cursor-pointer",
+                      )}
                       style={{
                         width: CELL,
                         height: CELL,

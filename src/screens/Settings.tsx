@@ -54,8 +54,6 @@ export function Settings() {
         <StudyingSection
           threshold={streak?.thresholdMinutes ?? boot?.focusedSessionMinutes ?? 20}
           restDays={streak?.restDays ?? []}
-          work={boot?.pomodoroWorkMinutes ?? 25}
-          brk={boot?.pomodoroBreakMinutes ?? 5}
           onChange={async () => {
             await init();
             await refreshProgress();
@@ -306,14 +304,10 @@ function SubjectRow({ subject, onChange }: { subject: Subject; onChange: () => P
 function StudyingSection({
   threshold,
   restDays,
-  work,
-  brk,
   onChange,
 }: {
   threshold: number;
   restDays: number[];
-  work: number;
-  brk: number;
   onChange: () => Promise<void>;
 }) {
   const [value, setValue] = useState(threshold);
@@ -334,7 +328,7 @@ function StudyingSection({
             <div className="text-[14px]">Focused session length</div>
             <div className="mt-0.5 max-w-[400px] text-[12.5px] leading-relaxed text-[var(--ink-faint)]">
               How much active time one session needs to earn the day. Pauses, idle time and breaks
-              don't count toward it. Defaults to 20, a little under one Pomodoro block so a real
+              don't count toward it. Defaults to 20, a little under a typical study block so a real
               block that included some idle time still counts.
             </div>
           </div>
@@ -378,61 +372,11 @@ function StudyingSection({
           </div>
         </div>
 
-        <div className="mt-5 flex items-center justify-between border-t border-[var(--line-soft)] pt-5">
-          <div className="text-[14px]">Default Pomodoro</div>
-          <div className="flex items-center gap-1.5 text-[13px] text-[var(--ink-faint)]">
-            <MinuteBox
-              value={work}
-              min={1}
-              max={180}
-              onCommit={async (v) => {
-                await api.setSetting("pomodoro_work_minutes", String(v));
-                await onChange();
-              }}
-            />
-            <span>/</span>
-            <MinuteBox
-              value={brk}
-              min={1}
-              max={60}
-              onCommit={async (v) => {
-                await api.setSetting("pomodoro_break_minutes", String(v));
-                await onChange();
-              }}
-            />
-            <span>min</span>
-          </div>
-        </div>
       </Card>
     </section>
   );
 }
 
-function MinuteBox({
-  value,
-  min,
-  max,
-  onCommit,
-}: {
-  value: number;
-  min: number;
-  max: number;
-  onCommit: (v: number) => Promise<void>;
-}) {
-  const [v, setV] = useState(value);
-  useEffect(() => setV(value), [value]);
-  return (
-    <input
-      type="number"
-      min={min}
-      max={max}
-      value={v}
-      onChange={(e) => setV(Number(e.target.value))}
-      onBlur={() => void onCommit(Math.min(max, Math.max(min, v)))}
-      className="tabular h-8 w-[54px] rounded-[var(--r-sm)] border border-[var(--line)] bg-[var(--surface-hi)] px-2 text-center text-[13px] text-[var(--ink)]"
-    />
-  );
-}
 
 // ---------------------------------------------------------------------------
 

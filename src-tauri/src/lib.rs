@@ -202,6 +202,8 @@ pub fn run() {
             commands::weekly_facts,
             commands::ai_practice_question,
             commands::ai_suggest_category,
+            commands::discard_session,
+            commands::day_detail,
             commands::preview_intervals,
             // Resources and the saved-output library.
             commands::list_resources,

@@ -260,6 +260,35 @@ async fn complete(
     user: &str,
     max_tokens: u32,
 ) -> Result<String, AiUnavailable> {
+    complete_with_images(provider, model, system, user, &[], max_tokens).await
+}
+
+/// Split a `data:image/png;base64,…` URL into its media type and payload.
+///
+/// Returns `None` for anything that isn't a base64 data URL, so a malformed
+/// attachment costs the image rather than the whole request.
+fn split_data_url(url: &str) -> Option<(&str, &str)> {
+    let rest = url.strip_prefix("data:")?;
+    let (meta, data) = rest.split_once(',')?;
+    let media = meta.strip_suffix(";base64")?;
+    media.starts_with("image/").then_some((media, data))
+}
+
+/// As `complete`, with images attached to the user turn.
+///
+/// Every provider takes images as an array of content parts rather than a
+/// string, and each spells it differently: Anthropic wants `source.data`,
+/// OpenAI wants the whole data URL back, Gemini wants `inline_data`. The
+/// divergence is why this is one function per provider rather than a shared
+/// body with a flag.
+async fn complete_with_images(
+    provider: Provider,
+    model: &str,
+    system: &str,
+    user: &str,
+    images: &[String],
+    max_tokens: u32,
+) -> Result<String, AiUnavailable> {
     let key = secrets::get_key(provider)
         .map_err(|_| AiUnavailable(format!("No {} key is set up.", provider.label())))?;
 
@@ -273,11 +302,18 @@ async fn complete(
     // shared.
     let (body, request) = match provider {
         Provider::Anthropic => {
+            let mut content = vec![json!({ "type": "text", "text": user })];
+            for (media, data) in images.iter().filter_map(|u| split_data_url(u)) {
+                content.push(json!({
+                    "type": "image",
+                    "source": { "type": "base64", "media_type": media, "data": data },
+                }));
+            }
             let body = json!({
                 "model": model,
                 "max_tokens": max_tokens,
                 "system": system,
-                "messages": [{ "role": "user", "content": user }],
+                "messages": [{ "role": "user", "content": content }],
             });
             let req = client
                 .post("https://api.anthropic.com/v1/messages")
@@ -293,12 +329,24 @@ async fn complete(
             } else {
                 "https://openrouter.ai/api/v1/chat/completions"
             };
+            // OpenAI accepts a plain string when there are no images, and the
+            // string form is what every existing feature sends — so the parts
+            // array is used only when there is actually an image.
+            let content = if images.is_empty() {
+                json!(user)
+            } else {
+                let mut parts = vec![json!({ "type": "text", "text": user })];
+                for url in images {
+                    parts.push(json!({ "type": "image_url", "image_url": { "url": url } }));
+                }
+                json!(parts)
+            };
             let body = json!({
                 "model": model,
                 "max_tokens": max_tokens,
                 "messages": [
                     { "role": "system", "content": system },
-                    { "role": "user", "content": user },
+                    { "role": "user", "content": content },
                 ],
             });
             let req = client
@@ -309,9 +357,13 @@ async fn complete(
         Provider::Gemini => {
             // The key goes in a header, never the query string — a credential in
             // a URL ends up in logs and history.
+            let mut parts = vec![json!({ "text": user })];
+            for (media, data) in images.iter().filter_map(|u| split_data_url(u)) {
+                parts.push(json!({ "inline_data": { "mime_type": media, "data": data } }));
+            }
             let body = json!({
                 "system_instruction": { "parts": [{ "text": system }] },
-                "contents": [{ "parts": [{ "text": user }] }],
+                "contents": [{ "parts": parts }],
                 "generationConfig": { "maxOutputTokens": max_tokens },
             });
             let url = format!(
@@ -789,6 +841,16 @@ impl Ai {
     /// from the user.
     pub async fn ask(&self, system: &str, user: &str) -> Result<String, AiUnavailable> {
         complete(self.provider, &self.model, system, user, 4000).await
+    }
+
+    /// Ask with images attached — a screenshot, a photo of a worked solution.
+    pub async fn ask_with_images(
+        &self,
+        system: &str,
+        user: &str,
+        images: &[String],
+    ) -> Result<String, AiUnavailable> {
+        complete_with_images(self.provider, &self.model, system, user, images, 4000).await
     }
 
     pub async fn weekly_review(&self, summary: &str) -> Result<String, AiUnavailable> {
@@ -1319,13 +1381,20 @@ mod tests {
         let source = include_str!("ai.rs");
         let body = source.split("#[cfg(test)]").next().unwrap();
 
-        // `ask` is the only entry point taking a system prompt, and its single
-        // caller builds it from a fixed pair of constants.
+        // Four sites take a system prompt, and they are two pairs: `complete`
+        // and `complete_with_images` (the transport), and `ask` and
+        // `ask_with_images` (the entry points). A fifth means something new
+        // accepts one, which is worth looking at by hand.
         assert_eq!(
             body.matches("system: &str").count(),
-            2,
+            4,
             "a new function accepts a caller-supplied system prompt"
         );
+
+        // Both entry points must be reached only with the two constants below.
+        for entry in ["pub async fn ask(", "pub async fn ask_with_images("] {
+            assert!(body.contains(entry), "{entry} went missing");
+        }
 
         let assistant = include_str!("assistant.rs");
         assert!(assistant.contains("pub const SYSTEM_STRICT"));
@@ -1464,5 +1533,34 @@ mod live_diagnostics {
         let default = default_model(Provider::Gemini);
         println!("\ncurrently shipped default: {default}");
         println!("is it usable? {}", usable.contains(&default));
+    }
+
+    // -- images ---------------------------------------------------------------
+
+    #[test]
+    fn a_data_url_splits_into_media_type_and_payload() {
+        assert_eq!(
+            split_data_url("data:image/png;base64,iVBORw0K"),
+            Some(("image/png", "iVBORw0K"))
+        );
+        assert_eq!(
+            split_data_url("data:image/jpeg;base64,/9j/4AA"),
+            Some(("image/jpeg", "/9j/4AA"))
+        );
+    }
+
+    /// A bad attachment must cost the image, not the whole question — the
+    /// request still has to go out with the text.
+    #[test]
+    fn anything_that_is_not_a_base64_image_url_is_ignored() {
+        for bad in [
+            "https://example.com/x.png",   // a link, not inline data
+            "data:text/plain;base64,aGk=", // not an image
+            "data:image/png,notbase64",    // missing the ;base64 marker
+            "iVBORw0KGgo=",                // bare payload
+            "",
+        ] {
+            assert_eq!(split_data_url(bad), None, "{bad}");
+        }
     }
 }

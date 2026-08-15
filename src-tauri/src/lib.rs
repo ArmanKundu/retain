@@ -25,11 +25,13 @@ mod assistant;
 mod capture;
 mod cards;
 mod scheduler;
+mod screen;
 mod secrets;
 mod settings;
 mod streak;
 mod subjects;
 mod timer;
+mod tools;
 mod tray;
 mod update;
 mod util;
@@ -247,6 +249,8 @@ pub fn run() {
             commands::move_plan_item,
             commands::delete_plan_item,
             commands::run_rollover,
+            commands::apply_assistant_action,
+            commands::capture_screen,
             commands::preview_intervals,
             // Resources and the saved-output library.
             commands::list_resources,

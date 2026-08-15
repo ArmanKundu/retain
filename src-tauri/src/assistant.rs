@@ -104,7 +104,11 @@ pub struct Message {
 #[serde(rename_all = "camelCase")]
 pub struct NewAttachment {
     pub name: String,
+    /// Extracted text. Empty for an image, whose content is the image itself.
     pub content: String,
+    /// A `data:image/...;base64,` URL for a screenshot or photo.
+    #[serde(default)]
+    pub image_data_url: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -388,15 +392,16 @@ pub fn add_user_message(
 
     {
         let mut stmt = tx.prepare(
-            "INSERT INTO message_attachments (message_id, name, content, words)
-             VALUES (?1, ?2, ?3, ?4)",
+            "INSERT INTO message_attachments (message_id, name, content, words, image_data_url)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
         )?;
         for a in attachments {
             stmt.execute(rusqlite::params![
                 id,
                 a.name,
                 a.content,
-                a.content.split_whitespace().count() as i64
+                a.content.split_whitespace().count() as i64,
+                a.image_data_url,
             ])?;
         }
     }

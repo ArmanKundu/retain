@@ -86,7 +86,7 @@ fn retrieved_material_is_marked_authoritative() {
 fn the_question_comes_last() {
     let prompt = build_prompt(
         &[excerpt("Notes", "a".repeat(400).as_str())],
-        &[NewAttachment { name: "sheet.txt".into(), content: "b".repeat(400) }],
+        &[NewAttachment { name: "sheet.txt".into(), content: "b".repeat(400), image_data_url: None }],
         "--- The student's Retain data ---\n12 reviews due.\n",
         &[],
         "MY ACTUAL QUESTION",
@@ -103,7 +103,7 @@ fn the_question_comes_last() {
 fn attachments_are_scoped_to_the_message_that_carried_them() {
     let prompt = build_prompt(
         &[],
-        &[NewAttachment { name: "worksheet.txt".into(), content: "Question 4b asks…".into() }],
+        &[NewAttachment { name: "worksheet.txt".into(), content: "Question 4b asks…".into(), image_data_url: None }],
         "",
         &[],
         "Help with 4b",
@@ -176,7 +176,7 @@ fn a_turn_round_trips_with_its_sources_and_attachments() {
         &mut conn,
         id,
         "Explain this question",
-        &[NewAttachment { name: "q.txt".into(), content: "some question text".into() }],
+        &[NewAttachment { name: "q.txt".into(), content: "some question text".into(), image_data_url: None }],
         now(),
     )
     .unwrap();
@@ -246,7 +246,7 @@ fn deleting_a_conversation_takes_its_messages_and_attachments() {
         &mut conn,
         id,
         "q",
-        &[NewAttachment { name: "a.txt".into(), content: "x".into() }],
+        &[NewAttachment { name: "a.txt".into(), content: "x".into(), image_data_url: None }],
         now(),
     )
     .unwrap();

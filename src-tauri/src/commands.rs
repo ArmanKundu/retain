@@ -22,7 +22,7 @@ use crate::models::*;
 use crate::timer::{self, ActiveTimer, SharedTimer};
 use crate::tray::TrayHandles;
 use crate::scheduler;
-use crate::{ai, assessments, assistant, biology, blocks, capture, ics, ingest, library, resources, update, workspace, cards, errors, export, inbox, notifications, plan, provider, secrets, settings, streak, subjects};
+use crate::{ai, assessments, assistant, biology, blocks, capture, ics, ingest, library, resources, update, workspace, cards, errors, export, inbox, notifications, plan, provider, screen, secrets, settings, streak, subjects, tools};
 
 /// Shared state, created in `lib.rs` and handed to every command.
 pub struct AppState {
@@ -1905,7 +1905,7 @@ pub async fn ask_assistant(
     conversation_id: i64,
     question: String,
     attachments: Vec<assistant::NewAttachment>,
-) -> CmdResult<assistant::Message> {
+) -> CmdResult<AssistantTurn> {
     let now = chrono::Utc::now();
 
     // --- everything that needs the database, before any network work --------
@@ -1942,27 +1942,109 @@ pub async fn ask_assistant(
     };
     let _ = subject_id;
 
-    let system = match grounding {
-        assistant::Grounding::Strict => assistant::SYSTEM_STRICT,
-        assistant::Grounding::Open => assistant::SYSTEM_OPEN,
+    // The action vocabulary is appended to the system prompt, never to the user
+    // half — an instruction about what the assistant may do must not be
+    // something a retrieved PDF can appear to be part of.
+    let system = format!(
+        "{}\n{}",
+        match grounding {
+            assistant::Grounding::Strict => assistant::SYSTEM_STRICT,
+            assistant::Grounding::Open => assistant::SYSTEM_OPEN,
+        },
+        tools::TOOL_PROMPT
+    );
+
+    // Images ride along on the user turn. Only inline data URLs — an attachment
+    // is something you picked or captured, never a URL the model can reach out
+    // to on its own.
+    let images: Vec<String> = attachments
+        .iter()
+        .filter_map(|a| a.image_data_url.clone())
+        .collect();
+
+    let answer = if images.is_empty() {
+        client.ask(&system, &prompt).await?
+    } else {
+        client.ask_with_images(&system, &prompt, &images).await?
     };
 
-    let answer = client.ask(system, &prompt).await?;
-
     let conn = db(&state);
+
+    // The action block is stripped before the reply is stored, so the saved
+    // conversation and its Markdown export read as prose rather than as JSON.
+    let (prose, proposals) = tools::extract(&conn, &answer);
+
     let id = assistant::add_assistant_message(
         &conn,
         conversation_id,
-        &answer,
+        &prose,
         &excerpts,
         Some(&model),
         chrono::Utc::now(),
     )?;
 
-    assistant::messages(&conn, conversation_id)?
+    let message = assistant::messages(&conn, conversation_id)?
         .into_iter()
         .find(|m| m.id == id)
-        .ok_or_else(|| CommandError("The answer couldn't be saved.".into()))
+        .ok_or_else(|| CommandError("The answer couldn't be saved.".into()))?;
+
+    Ok(AssistantTurn { message, proposals })
+}
+
+/// One turn: the stored reply, plus anything the assistant offered to do.
+///
+/// Proposals are deliberately not stored with the message. They are an offer
+/// attached to this moment; a button that is still sitting in a conversation
+/// three weeks later, next to a date that has passed, is a trap.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssistantTurn {
+    pub message: assistant::Message,
+    pub proposals: Vec<tools::Proposal>,
+}
+
+/// Perform an action the assistant proposed and the student confirmed.
+///
+/// Re-validated in `tools::apply` rather than trusted: this arrives from the
+/// frontend, and the whole point of the confirmation step is lost if the
+/// confirmed thing isn't checked again on the way through.
+#[tauri::command]
+pub fn apply_assistant_action(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    action: tools::Action,
+) -> CmdResult<tools::Applied> {
+    let applied = {
+        let conn = db(&state);
+        tools::apply(&conn, action)?
+    };
+
+    // Only ever an https URL — `tools::validate` is what guarantees that, and it
+    // has just run again inside `apply`.
+    if let Some(url) = &applied.open {
+        tauri_plugin_opener::OpenerExt::opener(&app)
+            .open_url(url.clone(), None::<&str>)
+            .map_err(|e| CommandError(e.to_string()))?;
+    }
+
+    Ok(applied)
+}
+
+/// Grab the screen for the next assistant message.
+///
+/// Explicit, one shot, and nothing is stored: the image comes straight back to
+/// the window that asked, as an attachment you can see and remove before you
+/// send it. See `screen` for why there is no watching mode.
+#[tauri::command]
+pub fn capture_screen(app: AppHandle) -> CmdResult<String> {
+    let dir = app
+        .path()
+        .app_cache_dir()
+        .map_err(|e| CommandError(format!("No cache directory: {e}")))?;
+    std::fs::create_dir_all(&dir).map_err(|e| CommandError(e.to_string()))?;
+
+    let png = screen::capture_png(&dir).map_err(|e| CommandError(e.to_string()))?;
+    Ok(screen::to_data_url(&png))
 }
 
 /// A conversation as Markdown, for saving or printing.

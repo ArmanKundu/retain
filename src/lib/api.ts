@@ -78,6 +78,9 @@ import type {
   PlanItem,
   NewPlanItem,
   Rollover,
+  AssistantTurn,
+  Applied,
+  Proposal,
 } from "./types";
 
 export const api = {
@@ -462,11 +465,16 @@ export const api = {
     question: string,
     attachments: NewAttachment[] = [],
   ) =>
-    invoke<ChatMessage>("ask_assistant", {
+    invoke<AssistantTurn>("ask_assistant", {
       conversationId,
       question,
       attachments,
     }),
+  /** Perform something the assistant proposed. Re-validated in Rust. */
+  applyAssistantAction: (action: Proposal["action"]) =>
+    invoke<Applied>("apply_assistant_action", { action }),
+  /** One screenshot, returned as a data URL. Nothing is stored or watched. */
+  captureScreen: () => invoke<string>("capture_screen"),
   conversationMarkdown: (conversationId: number) =>
     invoke<string>("conversation_markdown", { conversationId }),
 

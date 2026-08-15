@@ -55,7 +55,9 @@ fn cell_to_json(value: ValueRef<'_>) -> Value {
 }
 
 /// Minimal base64 encoder, so a whole crate isn't pulled in for one call site.
-fn base64_encode(bytes: &[u8]) -> String {
+///
+/// Also used by `screen` to build the data URL for a screenshot.
+pub fn base64_encode(bytes: &[u8]) -> String {
     const ALPHABET: &[u8; 64] =
         b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);

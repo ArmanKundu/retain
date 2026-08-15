@@ -13,8 +13,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   BookLock,
+  Check,
   Download,
+  ExternalLink,
   Globe,
+  Monitor,
   Paperclip,
   Plus,
   Printer,
@@ -32,6 +35,7 @@ import type {
   Conversation,
   Grounding,
   NewAttachment,
+  Proposal,
 } from "../lib/types";
 import { useApp } from "../store";
 
@@ -44,6 +48,11 @@ export function Assistant() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [question, setQuestion] = useState("");
   const [attachments, setAttachments] = useState<NewAttachment[]>([]);
+  // What the assistant last offered to do. Deliberately not stored with the
+  // conversation: a button offering to plan Thursday is meaningless in
+  // November, and one still sitting there is a trap rather than a feature.
+  const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [capturing, setCapturing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -108,9 +117,12 @@ export function Assistant() {
     const sent = attachments;
     setQuestion("");
     setAttachments([]);
+    // Last turn's offers expire the moment you ask something else.
+    setProposals([]);
 
     try {
-      await api.askAssistant(id, text, sent);
+      const turn = await api.askAssistant(id, text, sent);
+      setProposals(turn.proposals);
     } catch (e) {
       setError(String(e));
       // Put the question back so a failed request doesn't lose what you typed.
@@ -123,6 +135,29 @@ export function Assistant() {
     }
   };
 
+  /**
+   * Show the assistant what's on screen.
+   *
+   * One press, one image, and it goes nowhere until you send the message — it
+   * appears as an attachment you can look at and remove first. There is no
+   * watching mode; see `screen.rs` for why.
+   */
+  const showScreen = async () => {
+    setCapturing(true);
+    setError(null);
+    try {
+      const dataUrl = await api.captureScreen();
+      setAttachments((a) => [
+        ...a,
+        { name: "Screenshot", content: "", imageDataUrl: dataUrl },
+      ]);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setCapturing(false);
+    }
+  };
+
   const attach = async () => {
     const picked = await open({
       multiple: true,
@@ -130,7 +165,16 @@ export function Assistant() {
       filters: [
         {
           name: "Documents",
-          extensions: ["pdf", "txt", "md", "markdown", "csv", "html", "rtf", "json"],
+          extensions: [
+            "pdf",
+            "txt",
+            "md",
+            "markdown",
+            "csv",
+            "html",
+            "rtf",
+            "json",
+          ],
         },
       ],
     });
@@ -140,7 +184,10 @@ export function Assistant() {
     for (const path of paths) {
       const outcome = await api.readFileText(path);
       if (outcome.status === "extracted") {
-        setAttachments((a) => [...a, { name: outcome.name, content: outcome.text }]);
+        setAttachments((a) => [
+          ...a,
+          { name: outcome.name, content: outcome.text, imageDataUrl: null },
+        ]);
       } else {
         setError(
           outcome.status === "scanned"
@@ -158,7 +205,11 @@ export function Assistant() {
         <div className="titlebar-drag h-11" />
 
         <div className="px-3 pb-2">
-          <Button size="sm" className="w-full" onClick={() => void startConversation()}>
+          <Button
+            size="sm"
+            className="w-full"
+            onClick={() => void startConversation()}
+          >
             <Plus size={13} />
             New conversation
           </Button>
@@ -183,14 +234,23 @@ export function Assistant() {
                 )}
               >
                 {c.grounding === "strict" ? (
-                  <BookLock size={12} className="mt-[3px] shrink-0 text-[var(--ink-faint)]" />
+                  <BookLock
+                    size={12}
+                    className="mt-[3px] shrink-0 text-[var(--ink-faint)]"
+                  />
                 ) : (
-                  <Globe size={12} className="mt-[3px] shrink-0 text-[var(--ink-faint)]" />
+                  <Globe
+                    size={12}
+                    className="mt-[3px] shrink-0 text-[var(--ink-faint)]"
+                  />
                 )}
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[12.5px]">{c.title}</span>
+                  <span className="block truncate text-[12.5px]">
+                    {c.title}
+                  </span>
                   <span className="block text-[11px] text-[var(--ink-faint)]">
-                    {c.messageCount} {c.messageCount === 1 ? "message" : "messages"}
+                    {c.messageCount}{" "}
+                    {c.messageCount === 1 ? "message" : "messages"}
                   </span>
                 </span>
               </button>
@@ -207,9 +267,12 @@ export function Assistant() {
           <div className="mx-auto w-full max-w-[min(760px,100%)] px-6 pb-6 sm:px-9">
             {messages.length === 0 && (
               <header className="animate-rise mb-6">
-                <h1 className="text-[28px] font-semibold tracking-[-0.028em]">Assistant</h1>
+                <h1 className="text-[28px] font-semibold tracking-[-0.028em]">
+                  Assistant
+                </h1>
                 <p className="mt-1.5 text-[14px] leading-relaxed text-[var(--ink-dim)]">
-                  Ask about your subjects, your material, or what to work on next.
+                  Ask about your subjects, your material, or what to work on
+                  next.
                 </p>
               </header>
             )}
@@ -247,7 +310,18 @@ export function Assistant() {
           <div className="shrink-0 px-6 pb-5 sm:px-9">
             <div className="mx-auto w-full max-w-[min(760px,100%)]">
               {error && (
-                <p className="mb-2 text-[12.5px] leading-relaxed text-[var(--danger)]">{error}</p>
+                <p className="mb-2 text-[12.5px] leading-relaxed text-[var(--danger)]">
+                  {error}
+                </p>
+              )}
+
+              {proposals.length > 0 && (
+                <ProposalList
+                  proposals={proposals}
+                  onDone={(i) =>
+                    setProposals((p) => p.filter((_, j) => j !== i))
+                  }
+                />
               )}
 
               {attachments.length > 0 && (
@@ -257,10 +331,22 @@ export function Assistant() {
                       key={`${a.name}-${i}`}
                       className="flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface-hi)] px-2.5 py-1 text-[11.5px] text-[var(--ink-dim)]"
                     >
-                      <Paperclip size={11} />
+                      {a.imageDataUrl ? (
+                        <img
+                          src={a.imageDataUrl}
+                          alt=""
+                          className="h-4 w-6 rounded-[3px] object-cover"
+                        />
+                      ) : (
+                        <Paperclip size={11} />
+                      )}
                       {a.name}
                       <button
-                        onClick={() => setAttachments((list) => list.filter((_, j) => j !== i))}
+                        onClick={() =>
+                          setAttachments((list) =>
+                            list.filter((_, j) => j !== i),
+                          )
+                        }
                         aria-label={`Remove ${a.name}`}
                         className="pressable text-[var(--ink-faint)] hover:text-[var(--ink)]"
                       >
@@ -301,6 +387,16 @@ export function Assistant() {
                     className="pressable rounded-[var(--r-sm)] p-1.5 text-[var(--ink-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--ink)]"
                   >
                     <Paperclip size={15} />
+                  </button>
+
+                  <button
+                    onClick={() => void showScreen()}
+                    disabled={capturing}
+                    title="Show the assistant what's on your screen"
+                    aria-label="Attach a screenshot of your screen"
+                    className="pressable rounded-[var(--r-sm)] p-1.5 text-[var(--ink-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--ink)] disabled:opacity-50"
+                  >
+                    <Monitor size={15} />
                   </button>
 
                   <GroundingToggle
@@ -449,22 +545,24 @@ function StarterHints({
         <p className="text-[12.5px] leading-relaxed text-[var(--ink-dim)]">
           {grounding === "strict" ? (
             <>
-              Right now the assistant answers <strong>only from material you've uploaded</strong>.
-              If your notes don't cover something it'll say so rather than filling the gap — which
-              is the point: an answer you can trace back to your own study design is worth having,
-              and a confident one you can't is worse than none.
+              Right now the assistant answers{" "}
+              <strong>only from material you've uploaded</strong>. If your notes
+              don't cover something it'll say so rather than filling the gap —
+              which is the point: an answer you can trace back to your own study
+              design is worth having, and a confident one you can't is worse
+              than none.
             </>
           ) : (
             <>
-              The assistant will use your material first and then its own knowledge, saying
-              explicitly which is which.
+              The assistant will use your material first and then its own
+              knowledge, saying explicitly which is which.
             </>
           )}
           <br />
           <br />
-          It can also see what's due, what's coming up and this week's hours — so questions about
-          your actual schedule work. It won't change anything for you; it points you at the screen
-          instead.
+          It can also see what's due, what's coming up and this week's hours —
+          so questions about your actual schedule work. It won't change anything
+          for you; it points you at the screen instead.
         </p>
       </Card>
     </div>
@@ -482,7 +580,10 @@ function MessageBubble({ message }: { message: ChatMessage }) {
           {message.attachments.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1.5 border-t border-white/20 pt-2">
               {message.attachments.map((a) => (
-                <span key={a.id} className="flex items-center gap-1 text-[11px] text-white/80">
+                <span
+                  key={a.id}
+                  className="flex items-center gap-1 text-[11px] text-white/80"
+                >
                   <Paperclip size={10} />
                   {a.name}
                 </span>
@@ -504,24 +605,111 @@ function MessageBubble({ message }: { message: ChatMessage }) {
           checkable rather than something you have to take on trust. */}
       {message.sources.length > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
-          <span className="text-[11px] text-[var(--ink-faint)]">From your material:</span>
-          {Array.from(new Set(message.sources.map((s) => s.resourceTitle))).map((title) => (
-            <span
-              key={title}
-              title={
-                message.sources.find((s) => s.resourceTitle === title)?.content.slice(0, 500) ?? ""
-              }
-              className="rounded-full border border-[var(--line)] px-2 py-0.5 text-[11px] text-[var(--ink-dim)]"
-            >
-              {title}
-            </span>
-          ))}
+          <span className="text-[11px] text-[var(--ink-faint)]">
+            From your material:
+          </span>
+          {Array.from(new Set(message.sources.map((s) => s.resourceTitle))).map(
+            (title) => (
+              <span
+                key={title}
+                title={
+                  message.sources
+                    .find((s) => s.resourceTitle === title)
+                    ?.content.slice(0, 500) ?? ""
+                }
+                className="rounded-full border border-[var(--line)] px-2 py-0.5 text-[11px] text-[var(--ink-dim)]"
+              >
+                {title}
+              </span>
+            ),
+          )}
         </div>
       )}
 
       {message.model && (
-        <div className="mt-2 font-mono text-[10.5px] text-[var(--ink-faint)]">{message.model}</div>
+        <div className="mt-2 font-mono text-[10.5px] text-[var(--ink-faint)]">
+          {message.model}
+        </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * What the assistant offered to do.
+ *
+ * Every one of these is a button and nothing happens without a press. The label
+ * comes from Rust, built from the parsed action rather than from anything the
+ * model wrote — a proposal that could describe itself would make the whole
+ * confirmation step decoration. See `src-tauri/src/tools.rs`.
+ */
+function ProposalList({
+  proposals,
+  onDone,
+}: {
+  proposals: Proposal[];
+  onDone: (index: number) => void;
+}) {
+  const [running, setRunning] = useState<number | null>(null);
+  const [failed, setFailed] = useState<Record<number, string>>({});
+
+  const run = async (p: Proposal, i: number) => {
+    setRunning(i);
+    try {
+      await api.applyAssistantAction(p.action);
+      onDone(i);
+    } catch (e) {
+      setFailed((f) => ({ ...f, [i]: String(e) }));
+    } finally {
+      setRunning(null);
+    }
+  };
+
+  return (
+    <div className="animate-rise mb-2.5 space-y-1.5">
+      {proposals.map((p, i) => (
+        <div
+          key={`${p.summary}-${i}`}
+          className="flex items-center gap-3 rounded-[var(--r-md)] border border-[var(--line)] bg-[var(--surface-hi)] px-3.5 py-2.5"
+        >
+          {p.external ? (
+            <ExternalLink size={14} className="shrink-0 text-[var(--warn)]" />
+          ) : (
+            <Check size={14} className="shrink-0 text-[var(--ink-faint)]" />
+          )}
+
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[13px] text-[var(--ink)]">
+              {p.summary}
+            </div>
+            {p.external && (
+              <div className="text-[11.5px] text-[var(--warn)]">
+                Leaves Retain
+              </div>
+            )}
+            {failed[i] && (
+              <div className="mt-0.5 text-[11.5px] text-[var(--danger)]">
+                {failed[i]}
+              </div>
+            )}
+          </div>
+
+          <Button
+            size="sm"
+            disabled={running === i}
+            onClick={() => void run(p, i)}
+          >
+            {running === i ? "…" : "Do it"}
+          </Button>
+          <button
+            onClick={() => onDone(i)}
+            aria-label="Dismiss this suggestion"
+            className="pressable shrink-0 rounded-full p-1 text-[var(--ink-faint)] hover:text-[var(--ink)]"
+          >
+            <X size={13} />
+          </button>
+        </div>
+      ))}
     </div>
   );
 }

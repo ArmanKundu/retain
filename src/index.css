@@ -11,8 +11,8 @@
 
 @theme {
   --font-sans:
-    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica,
-    Arial, sans-serif;
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue",
+    Helvetica, Arial, sans-serif;
 
   --color-canvas: #0b0b0d;
   --color-surface: #141417;
@@ -57,7 +57,7 @@
   --surface-hi: #fbfbfa;
   /* Borders carry alpha rather than a grey value, so they sit on any surface
      without drawing a hard line around it. */
-  --line: rgba(16, 18, 27, 0.10);
+  --line: rgba(16, 18, 27, 0.1);
   --line-soft: rgba(16, 18, 27, 0.06);
   --ink: #1d1d1f;
   --ink-dim: #6e6e73;
@@ -68,7 +68,6 @@
 
   color-scheme: light;
 }
-
 
 /* ---------------------------------------------------------------------------
    Retain design tokens.
@@ -81,23 +80,18 @@
 
 :root {
   /* Geometry. Four steps, and pills. Anything not on this scale is a bug. */
-  --r-sm: 10px;   /* small controls: chips, inputs, icon buttons */
-  --r-md: 14px;   /* buttons, list rows, compact panels */
-  --r-lg: 20px;   /* cards and panels */
-  --r-xl: 24px;   /* floating surfaces: dock, command bar, review card, sheets */
+  --r-sm: 10px; /* small controls: chips, inputs, icon buttons */
+  --r-md: 14px; /* buttons, list rows, compact panels */
+  --r-lg: 20px; /* cards and panels */
+  --r-xl: 24px; /* floating surfaces: dock, command bar, review card, sheets */
 
   /* Elevation. Two layers each: a tight contact shadow for the object's edge,
      and a wider ambient one for the space beneath it. One shadow alone reads as
      blur; two read as an object sitting above a surface. */
-  --e-sm:
-    0 1px 2px rgba(0, 0, 0, 0.06),
-    0 2px 8px rgba(0, 0, 0, 0.05);
-  --e-md:
-    0 2px 4px rgba(0, 0, 0, 0.07),
-    0 8px 24px rgba(0, 0, 0, 0.09);
+  --e-sm: 0 1px 2px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.05);
+  --e-md: 0 2px 4px rgba(0, 0, 0, 0.07), 0 8px 24px rgba(0, 0, 0, 0.09);
   --e-lg:
-    0 2px 8px rgba(0, 0, 0, 0.24),
-    0 20px 50px rgba(0, 0, 0, 0.34),
+    0 2px 8px rgba(0, 0, 0, 0.24), 0 20px 50px rgba(0, 0, 0, 0.34),
     0 40px 100px rgba(0, 0, 0, 0.28);
 
   /* Motion. Two durations. Anything slower reads as sluggish, anything faster
@@ -120,25 +114,21 @@
 
   /* The atmospheric wash behind the app. Almost imperceptible by design: it
      gives the background depth without ever competing with content. */
-  --wash-a: rgba(91, 141, 239, 0.10);
+  --wash-a: rgba(91, 141, 239, 0.1);
   --wash-b: rgba(75, 169, 123, 0.07);
   --wash-c: rgba(150, 110, 240, 0.06);
-  --sheet-line: rgba(255, 255, 255, 0.10);
+  --sheet-line: rgba(255, 255, 255, 0.1);
 }
 
 :root[data-theme="light"] {
   /* Light mode shadows carry more black, because a light surface needs a
      stronger contact edge to separate from a light background. */
-  --e-sm:
-    0 1px 2px rgba(16, 18, 27, 0.04),
-    0 4px 12px rgba(16, 18, 27, 0.04);
+  --e-sm: 0 1px 2px rgba(16, 18, 27, 0.04), 0 4px 12px rgba(16, 18, 27, 0.04);
   --e-md:
-    0 1px 2px rgba(16, 18, 27, 0.04),
-    0 8px 24px rgba(16, 18, 27, 0.05),
+    0 1px 2px rgba(16, 18, 27, 0.04), 0 8px 24px rgba(16, 18, 27, 0.05),
     0 24px 60px rgba(16, 18, 27, 0.04);
   --e-lg:
-    0 2px 8px rgba(16, 18, 27, 0.06),
-    0 20px 50px rgba(16, 18, 27, 0.10),
+    0 2px 8px rgba(16, 18, 27, 0.06), 0 20px 50px rgba(16, 18, 27, 0.1),
     0 40px 100px rgba(16, 18, 27, 0.08);
 
   --glass: rgba(255, 255, 255, 0.72);
@@ -148,7 +138,7 @@
   --spotlight-line: rgba(255, 255, 255, 0.8);
   --sheet-line: rgba(255, 255, 255, 0.75);
 
-  --wash-a: rgba(91, 141, 239, 0.10);
+  --wash-a: rgba(91, 141, 239, 0.1);
   --wash-b: rgba(75, 169, 123, 0.08);
   --wash-c: rgba(150, 110, 240, 0.06);
 }
@@ -212,14 +202,21 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 
-/* The drag handle. An undecorated window has no title bar to grab, so one
-   region is designated draggable — otherwise the bar is stuck wherever macOS
-   centred it. */
+/* The drag handle.
+
+   This used `-webkit-app-region: drag`, which is a Chromium feature. Tauri
+   renders through WKWebView on macOS, where that property does nothing at all —
+   the bar was permanently stuck wherever macOS centred it. Tauri's own
+   `data-tauri-drag-region` attribute is the supported mechanism; the styling
+   below is only the cursor affordance that goes with it. */
 .spotlight-drag {
-  -webkit-app-region: drag;
+  cursor: grab;
+}
+.spotlight-drag:active {
+  cursor: grabbing;
 }
 .spotlight-drag :is(input, textarea, button, kbd) {
-  -webkit-app-region: no-drag;
+  cursor: auto;
 }
 
 /* Modals -----------------------------------------------------------------
@@ -274,16 +271,32 @@
 /* Entrances --------------------------------------------------------------- */
 
 @keyframes rise {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: none; }
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 @keyframes pop {
-  from { opacity: 0; transform: translateY(10px) scale(0.97); }
-  to   { opacity: 1; transform: none; }
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
-.animate-rise { animation: rise var(--t-base) var(--ease) both; }
-.animate-pop  { animation: pop 220ms var(--ease) both; }
+.animate-rise {
+  animation: rise var(--t-base) var(--ease) both;
+}
+.animate-pop {
+  animation: pop 220ms var(--ease) both;
+}
 
 /* Someone who has asked the system to reduce motion means it. Transitions are
    collapsed rather than removed, so state changes still register. */
@@ -296,8 +309,12 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
-  .lift:hover { transform: none; }
-  .pressable:active { transform: none; }
+  .lift:hover {
+    transform: none;
+  }
+  .pressable:active {
+    transform: none;
+  }
 }
 
 /* ---------------------------------------------------------------------------
@@ -317,6 +334,15 @@ html {
      end, and nothing gives away a web view faster. */
   overscroll-behavior: none;
   background: var(--canvas);
+}
+
+/* The capture window is transparent at the OS level, so nothing behind the pill
+   may paint. Without this the window's own canvas showed as a black slab and
+   the blur had the app's background to work with rather than your desktop —
+   which is the entire visual point of a Spotlight-style bar. */
+html[data-window="capture"],
+html[data-window="capture"] body {
+  background: transparent;
 }
 
 body {
@@ -433,8 +459,6 @@ textarea:focus-visible,
 .animate-in {
   animation: rise var(--t-base) var(--ease) both;
 }
-
-
 
 /* ---------------------------------------------------------------------------
    Printing.

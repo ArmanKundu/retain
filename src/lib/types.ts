@@ -712,7 +712,35 @@ export interface ChatMessage {
 
 export interface NewAttachment {
   name: string;
+  /** Extracted text. Empty for an image, whose content is the image itself. */
   content: string;
+  /** A `data:image/...;base64,` URL — a screenshot or a photo. */
+  imageDataUrl: string | null;
+}
+
+/**
+ * Something the assistant offered to do, which you have not agreed to yet.
+ *
+ * `summary` is generated in Rust from the parsed action, never written by the
+ * model — see `tools.rs`. A button whose label came from the same place as the
+ * action it performs is not a confirmation.
+ */
+export interface Proposal {
+  action: Record<string, unknown> & { action: string };
+  summary: string;
+  /** True for anything that leaves Retain. Shown more prominently. */
+  external: boolean;
+}
+
+export interface AssistantTurn {
+  message: ChatMessage;
+  proposals: Proposal[];
+}
+
+export interface Applied {
+  ok: boolean;
+  message: string;
+  open: string | null;
 }
 
 /** How one day was actually spent — the question the grid always prompted. */

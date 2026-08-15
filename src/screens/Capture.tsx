@@ -39,7 +39,8 @@ export function Capture() {
   // exactly what `main.tsx` keeps out of the capture path.
   const syncTheme = useCallback(() => {
     const apply = (theme: string) => {
-      document.documentElement.dataset.theme = theme === "light" ? "light" : "dark";
+      document.documentElement.dataset.theme =
+        theme === "light" ? "light" : "dark";
     };
     void api
       .getSetting("theme")
@@ -75,7 +76,10 @@ export function Capture() {
       return;
     }
     const t = setTimeout(() => {
-      void api.saveCapturePreview(text).then(setParsed).catch(() => setParsed(null));
+      void api
+        .saveCapturePreview(text)
+        .then(setParsed)
+        .catch(() => setParsed(null));
     }, 120);
     return () => clearTimeout(t);
   }, [text]);
@@ -94,7 +98,10 @@ export function Capture() {
 
     setSaving(true);
     try {
-      await api.saveCaptureWithAttachments(value || "(screenshot)", attachments);
+      await api.saveCaptureWithAttachments(
+        value || "(screenshot)",
+        attachments,
+      );
       setText("");
       setParsed(null);
       setAttachments([]);
@@ -106,7 +113,9 @@ export function Capture() {
 
   /** Pasted images become attachments; pasted text lands in the field. */
   const onPaste = useCallback((e: React.ClipboardEvent) => {
-    const image = Array.from(e.clipboardData.files).find((f) => f.type.startsWith("image/"));
+    const image = Array.from(e.clipboardData.files).find((f) =>
+      f.type.startsWith("image/"),
+    );
     if (!image) return;
 
     e.preventDefault();
@@ -114,7 +123,11 @@ export function Capture() {
     reader.onload = () =>
       setAttachments((list) => [
         ...list,
-        { name: image.name || "Screenshot", imageDataUrl: String(reader.result), text: null },
+        {
+          name: image.name || "Screenshot",
+          imageDataUrl: String(reader.result),
+          text: null,
+        },
       ]);
     reader.readAsDataURL(image);
   }, []);
@@ -124,7 +137,12 @@ export function Capture() {
     const picked = await openDialog({
       multiple: true,
       title: "Attach to this capture",
-      filters: [{ name: "Documents", extensions: ["pdf", "txt", "md", "png", "jpg", "jpeg"] }],
+      filters: [
+        {
+          name: "Documents",
+          extensions: ["pdf", "txt", "md", "png", "jpg", "jpeg"],
+        },
+      ],
     });
     if (!picked) return;
 
@@ -150,6 +168,7 @@ export function Capture() {
     // window bounds — an undecorated window clips anything drawn outside it.
     <div className="flex h-screen w-screen flex-col justify-center p-2">
       <div
+        data-tauri-drag-region
         className="spotlight overflow-hidden rounded-[var(--r-xl)]"
         onPaste={onPaste}
         onKeyDown={(e) => {
@@ -164,8 +183,15 @@ export function Capture() {
         }}
       >
         {/* The whole bar drags except its controls — an undecorated window has
-            no title bar, so without this it's stuck where macOS put it. */}
-        <div className="spotlight-drag flex items-center gap-3 px-4 py-3">
+            no title bar, so without this it's stuck where macOS put it.
+            `data-tauri-drag-region` rather than `-webkit-app-region`, which
+            WKWebView ignores. Tauri only honours the attribute on the element
+            actually under the pointer, so the controls opt out by being real
+            interactive elements rather than by a second attribute. */}
+        <div
+          data-tauri-drag-region
+          className="spotlight-drag flex items-center gap-3 px-4 py-3"
+        >
           <Sparkle
             size={19}
             strokeWidth={1.9}
@@ -218,13 +244,19 @@ export function Capture() {
                 className="flex items-center gap-1.5 rounded-full border border-white/12 bg-white/8 px-2 py-1 text-[11.5px] text-[var(--ink-dim)]"
               >
                 {a.imageDataUrl ? (
-                  <img src={a.imageDataUrl} alt="" className="h-4 w-4 rounded-[3px] object-cover" />
+                  <img
+                    src={a.imageDataUrl}
+                    alt=""
+                    className="h-4 w-4 rounded-[3px] object-cover"
+                  />
                 ) : (
                   <Paperclip size={10} />
                 )}
                 <span className="max-w-[140px] truncate">{a.name}</span>
                 <button
-                  onClick={() => setAttachments((list) => list.filter((_, j) => j !== i))}
+                  onClick={() =>
+                    setAttachments((list) => list.filter((_, j) => j !== i))
+                  }
                   aria-label={`Remove ${a.name}`}
                   className="pressable text-[var(--ink-faint)] hover:text-[var(--ink)]"
                 >
@@ -252,7 +284,9 @@ export function Capture() {
                   due {parsed!.dueOn}
                 </span>
               )}
-              <span className="truncate text-[var(--ink-dim)]">{parsed!.title}</span>
+              <span className="truncate text-[var(--ink-dim)]">
+                {parsed!.title}
+              </span>
             </div>
           </div>
         )}

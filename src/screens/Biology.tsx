@@ -311,8 +311,8 @@ function ScoreDialog({
   const num = (v: string) => (v.trim() === "" ? null : Number(v));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6">
-      <Card className="w-full max-w-[380px] p-5">
+    <div className="scrim fixed inset-0 z-50 flex items-center justify-center px-8">
+      <div className="sheet animate-pop w-full max-w-[400px] p-6">
         <SectionTitle>{exam.name}</SectionTitle>
 
         <div className="mt-3 space-y-3">
@@ -347,7 +347,7 @@ function ScoreDialog({
             Cancel
           </Button>
         </div>
-      </Card>
+      </div>
     </div>
   );
 }

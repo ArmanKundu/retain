@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 
 import { AiAction, AiGate, useAi } from "../components/Ai";
+import { Markdown } from "../components/Markdown";
 import { Chip, SectionHeader, SubjectPill } from "../components/primitives";
 import { Button, Card, Empty, cx } from "../components/ui";
 import { api } from "../lib/api";
@@ -274,26 +275,24 @@ function ItemViewer({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6"
+      className="scrim fixed inset-0 z-50 flex items-center justify-center px-8"
       onClick={onClose}
     >
       <div
-        className="glass animate-pop flex max-h-[86vh] w-full max-w-[720px] flex-col rounded-[var(--r-xl)]"
+        className="sheet animate-pop flex max-h-[86vh] w-full max-w-[820px] flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start gap-3 border-b border-[var(--line-soft)] p-5">
+        <div className="flex items-start gap-3 px-9 pb-5 pt-8">
           <div className="min-w-0 flex-1">
-            <h2 className="text-[17px] font-semibold tracking-[-0.01em]">{item.title}</h2>
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-[11.5px] text-[var(--ink-faint)]">
-              <span>{KIND_LABEL[item.kind]}</span>
-              <span>·</span>
-              <span>{item.createdAt.slice(0, 10)}</span>
-              {item.model && (
-                <>
-                  <span>·</span>
-                  <span className="font-mono">{item.model}</span>
-                </>
-              )}
+            <h2 className="text-[27px] font-semibold leading-tight tracking-[-0.025em]">
+              {item.title}
+            </h2>
+            {/* Metadata as quiet pills rather than a run-on line of separators. */}
+            <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+              <Meta>{KIND_LABEL[item.kind]}</Meta>
+              {item.subjectName && <Meta>{item.subjectName}</Meta>}
+              <Meta>{item.createdAt.slice(0, 10)}</Meta>
+              {item.model && <Meta mono>{item.model}</Meta>}
             </div>
           </div>
 
@@ -315,18 +314,18 @@ function ItemViewer({
 
         {/* `print-target` is what the print stylesheet keeps; everything else on
             the page is hidden when printing. */}
-        <div className="print-target selectable flex-1 overflow-y-auto p-6">
+        <div className="print-target selectable min-h-0 flex-1 overflow-y-auto px-9 pb-8">
           {item.prompt && (
-            <p className="mb-4 border-l-2 border-[var(--line)] pl-3 text-[12.5px] italic text-[var(--ink-faint)]">
+            <p className="mb-6 border-l-2 border-[var(--line)] pl-3.5 text-[13px] italic leading-relaxed text-[var(--ink-faint)]">
               {item.prompt}
             </p>
           )}
-          <pre className="whitespace-pre-wrap font-sans text-[13.5px] leading-[1.7] text-[var(--ink)]">
-            {item.body}
-          </pre>
+          {/* A measure of roughly 70 characters. Wider than this and the eye
+              loses the line it was on between one row and the next. */}
+          <Markdown source={item.body} className="max-w-[680px]" />
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 border-t border-[var(--line-soft)] p-4">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-[var(--line-soft)] px-9 py-4">
           <Button
             size="sm"
             onClick={async () => {
@@ -810,5 +809,19 @@ function ImportReport({
         </div>
       )}
     </Card>
+  );
+}
+
+/** A quiet metadata pill for the note header. */
+function Meta({ children, mono }: { children: React.ReactNode; mono?: boolean }) {
+  return (
+    <span
+      className={cx(
+        "rounded-full border border-[var(--line)] px-2 py-0.5 text-[11.5px] text-[var(--ink-dim)]",
+        mono && "font-mono",
+      )}
+    >
+      {children}
+    </span>
   );
 }

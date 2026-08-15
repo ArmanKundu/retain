@@ -40,13 +40,13 @@ export function SessionNotePrompt({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-8 backdrop-blur-[2px]"
+      className="scrim fixed inset-0 z-50 flex items-center justify-center px-8"
       onKeyDown={(e) => {
         if (e.key === "Escape") onClose();
         if (e.key === "Enter") void save();
       }}
     >
-      <div className="glass animate-pop w-full max-w-[440px] rounded-[var(--r-xl)] p-6">
+      <div className="sheet animate-pop w-full max-w-[440px] p-7">
         <div className="text-[17px] font-semibold tracking-[-0.01em]">
           {duration(session.activeSeconds)} on {session.subjectName}
         </div>

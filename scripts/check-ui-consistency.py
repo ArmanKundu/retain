@@ -18,6 +18,7 @@ ALLOWED_RADII = {
     "rounded-[var(--r-md)]",
     "rounded-[var(--r-lg)]",
     "rounded-[var(--r-xl)]",
+    "rounded-[6px]",    # inline code
     "rounded-[7px]",    # checkboxes, genuinely smaller than the smallest token
     "rounded-[2.5px]",  # contribution-grid cells
 }
@@ -39,12 +40,41 @@ def check(name: str, problems: list[str]) -> None:
 
 files = sorted(SRC.rglob("*.tsx"))
 
-# 1. Unterminated string literals — what the sweep broke.
+# 1. Unterminated string literals — what a bulk className sweep once broke.
+#
+# Comments are stripped first: a quoted phrase wrapped across two lines of a
+# JSX comment is perfectly valid but has an odd quote count on each line, and
+# reporting those buries the real thing this looks for.
+def without_comments(text: str) -> list[tuple[int, str]]:
+    out, in_block = [], False
+    for i, line in enumerate(text.splitlines(), 1):
+        stripped = line
+        if in_block:
+            end = stripped.find("*/")
+            if end == -1:
+                continue
+            stripped, in_block = stripped[end + 2 :], False
+        # Opening a block comment (including the JSX `{/* … */}` form).
+        while True:
+            start = stripped.find("/*")
+            if start == -1:
+                break
+            end = stripped.find("*/", start + 2)
+            if end == -1:
+                stripped, in_block = stripped[:start], True
+                break
+            stripped = stripped[:start] + stripped[end + 2 :]
+        line_comment = stripped.find("//")
+        if line_comment != -1 and stripped[:line_comment].count('"') % 2 == 0:
+            stripped = stripped[:line_comment]
+        out.append((i, stripped))
+    return out
+
+
 bad = []
 for p in files:
-    for i, line in enumerate(p.read_text().splitlines(), 1):
-        head = line.split('"')[0]
-        if line.count('"') % 2 == 1 and "//" not in head and "*" not in head:
+    for i, line in without_comments(p.read_text()):
+        if line.count('"') % 2 == 1:
             bad.append(f"{p.relative_to(ROOT)}:{i}")
 check("no unterminated string literals", bad)
 

@@ -52,14 +52,16 @@
 }
 
 :root[data-theme="light"] {
-  --canvas: #f6f6f7;
+  --canvas: #f7f7f5;
   --surface: #ffffff;
-  --surface-hi: #fbfbfc;
-  --line: #e2e2e6;
-  --line-soft: #ececf0;
-  --ink: #17171a;
-  --ink-dim: #5f5f6b;
-  --ink-faint: #96969f;
+  --surface-hi: #fbfbfa;
+  /* Borders carry alpha rather than a grey value, so they sit on any surface
+     without drawing a hard line around it. */
+  --line: rgba(16, 18, 27, 0.10);
+  --line-soft: rgba(16, 18, 27, 0.06);
+  --ink: #1d1d1f;
+  --ink-dim: #6e6e73;
+  --ink-faint: #9a9aa0;
   --accent: #3b6fd4;
   --danger: #c0394b;
   --warn: #a55a2c;
@@ -82,7 +84,7 @@
   --r-sm: 10px;   /* small controls: chips, inputs, icon buttons */
   --r-md: 14px;   /* buttons, list rows, compact panels */
   --r-lg: 20px;   /* cards and panels */
-  --r-xl: 26px;   /* floating surfaces: dock, command bar, review card */
+  --r-xl: 24px;   /* floating surfaces: dock, command bar, review card, sheets */
 
   /* Elevation. Two layers each: a tight contact shadow for the object's edge,
      and a wider ambient one for the space beneath it. One shadow alone reads as
@@ -94,8 +96,9 @@
     0 2px 4px rgba(0, 0, 0, 0.07),
     0 8px 24px rgba(0, 0, 0, 0.09);
   --e-lg:
-    0 4px 8px rgba(0, 0, 0, 0.09),
-    0 16px 48px rgba(0, 0, 0, 0.14);
+    0 2px 8px rgba(0, 0, 0, 0.24),
+    0 20px 50px rgba(0, 0, 0, 0.34),
+    0 40px 100px rgba(0, 0, 0, 0.28);
 
   /* Motion. Two durations. Anything slower reads as sluggish, anything faster
      doesn't register as a state change. */
@@ -120,26 +123,30 @@
   --wash-a: rgba(91, 141, 239, 0.10);
   --wash-b: rgba(75, 169, 123, 0.07);
   --wash-c: rgba(150, 110, 240, 0.06);
+  --sheet-line: rgba(255, 255, 255, 0.10);
 }
 
 :root[data-theme="light"] {
   /* Light mode shadows carry more black, because a light surface needs a
      stronger contact edge to separate from a light background. */
   --e-sm:
-    0 1px 2px rgba(16, 18, 27, 0.05),
-    0 2px 8px rgba(16, 18, 27, 0.05);
+    0 1px 2px rgba(16, 18, 27, 0.04),
+    0 4px 12px rgba(16, 18, 27, 0.04);
   --e-md:
-    0 2px 4px rgba(16, 18, 27, 0.06),
-    0 8px 24px rgba(16, 18, 27, 0.08);
+    0 1px 2px rgba(16, 18, 27, 0.04),
+    0 8px 24px rgba(16, 18, 27, 0.05),
+    0 24px 60px rgba(16, 18, 27, 0.04);
   --e-lg:
-    0 4px 8px rgba(16, 18, 27, 0.07),
-    0 16px 48px rgba(16, 18, 27, 0.12);
+    0 2px 8px rgba(16, 18, 27, 0.06),
+    0 20px 50px rgba(16, 18, 27, 0.10),
+    0 40px 100px rgba(16, 18, 27, 0.08);
 
   --glass: rgba(255, 255, 255, 0.72);
   --glass-line: rgba(255, 255, 255, 0.55);
 
   --spotlight: rgba(255, 255, 255, 0.62);
   --spotlight-line: rgba(255, 255, 255, 0.7);
+  --sheet-line: rgba(255, 255, 255, 0.75);
 
   --wash-a: rgba(91, 141, 239, 0.10);
   --wash-b: rgba(75, 169, 123, 0.08);
@@ -203,6 +210,28 @@
     0 24px 68px rgba(0, 0, 0, 0.34),
     0 2px 10px rgba(0, 0, 0, 0.18),
     inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+/* Modals -----------------------------------------------------------------
+
+   One system for every dialog. The backdrop darkens and blurs; the sheet itself
+   stays bright. Previously several modals were a flat grey panel over a flat
+   grey scrim, which is what made them read as web forms rather than macOS
+   sheets. */
+
+.scrim {
+  background: rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(12px) saturate(120%);
+  -webkit-backdrop-filter: blur(12px) saturate(120%);
+}
+
+.sheet {
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter: blur(30px) saturate(180%);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  border: 1px solid var(--sheet-line);
+  border-radius: 24px;
+  box-shadow: var(--e-lg);
 }
 
 /* Interaction ------------------------------------------------------------- */

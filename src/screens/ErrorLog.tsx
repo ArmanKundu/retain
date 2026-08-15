@@ -47,6 +47,7 @@ export function ErrorLog() {
   const [filter, setFilter] = useState<EntryFilter>({ onlyUnfixed: false });
   const [search, setSearch] = useState("");
   const [composing, setComposing] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
   const [prompt, setPrompt] = useState<BlindPrompt | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -252,6 +253,17 @@ export function ErrorLog() {
         </div>
       )}
 
+      {/* A brief confirmation. Closing silently gave no sign the re-attempt had
+          been scheduled, which is the part that makes logging worth doing. */}
+      {toast && (
+        <div className="pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2">
+          <div className="glass animate-pop flex items-center gap-2 rounded-full px-4 py-2.5 text-[13px] text-[var(--ink)]">
+            <Check size={14} className="text-[var(--color-positive)]" />
+            {toast}
+          </div>
+        </div>
+      )}
+
       {composing && (
         <ComposeModal
           subjects={subjects}
@@ -259,6 +271,8 @@ export function ErrorLog() {
           onSaved={async () => {
             setComposing(false);
             await load();
+            setToast("Logged — you'll re-attempt it blind in a week.");
+            window.setTimeout(() => setToast(null), 4000);
           }}
         />
       )}
@@ -446,8 +460,8 @@ function ReattemptModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-8 backdrop-blur-[2px]">
-      <div className="glass animate-pop max-h-[86vh] w-full max-w-[620px] overflow-y-auto rounded-[var(--r-xl)] p-6">
+    <div className="scrim fixed inset-0 z-50 flex items-center justify-center px-8">
+      <div className="sheet animate-pop max-h-[86vh] w-full max-w-[620px] overflow-y-auto p-7">
         <div className="flex items-center gap-2">
           <ColourDot colour={prompt.colour} size={8} />
           <span className="text-[12.5px] text-[var(--ink-faint)]">{prompt.subjectName}</span>
@@ -684,132 +698,157 @@ function ComposeModal({
   const activeWord = words.find((w) => w.word === form.commandWord);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-8 backdrop-blur-[2px]">
+    <div className="scrim fixed inset-0 z-50 flex items-center justify-center px-8">
       <div
         onPaste={onPaste}
-        className="glass animate-pop max-h-[88vh] w-full max-w-[620px] overflow-y-auto rounded-[var(--r-xl)] p-6"
+        className="sheet animate-pop flex max-h-[86vh] w-full max-w-[660px] flex-col"
       >
-        <h2 className="text-[17px] font-semibold tracking-[-0.01em]">Log an error</h2>
+        {/* A reflection, not a database record. The old heading said "Log an
+            error" over seven labelled fields, which is the wrong frame for the
+            moment right after you got something wrong. */}
+        <header className="shrink-0 px-7 pt-7">
+          <h2 className="text-[22px] font-semibold tracking-[-0.02em]">Let's learn from this.</h2>
+          <p className="mt-1.5 text-[13.5px] leading-relaxed text-[var(--ink-dim)]">
+            Capture what went wrong now, and Retain will bring it back for a blind re-attempt in a
+            week.
+          </p>
+        </header>
 
-        <div className="mt-4 flex flex-wrap gap-1.5">
-          {subjects.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => setSubjectId(s.id)}
-              className={cx(
-                "flex items-center gap-2 rounded-full border px-3 py-1.5 text-[13px] transition-all active:scale-[0.97]",
-                subjectId === s.id
-                  ? "border-[var(--ink-faint)] bg-[var(--surface-hi)] text-[var(--ink)]"
-                  : "border-[var(--line)] text-[var(--ink-dim)]",
-              )}
-            >
-              <ColourDot colour={s.colour} size={8} />
-              {s.name}
-            </button>
-          ))}
-        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-7 py-6">
+          <div className="flex flex-wrap gap-1.5">
+            {subjects.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => setSubjectId(s.id)}
+                className={cx(
+                  "pressable flex items-center gap-2 rounded-full border px-3 py-1.5 text-[13px]",
+                  subjectId === s.id
+                    ? "text-[var(--ink)]"
+                    : "border-[var(--line)] text-[var(--ink-dim)] hover:border-[var(--ink-faint)]",
+                )}
+                style={
+                  subjectId === s.id
+                    ? {
+                        borderColor: `color-mix(in srgb, ${s.colour} 40%, transparent)`,
+                        background: `color-mix(in srgb, ${s.colour} 13%, transparent)`,
+                      }
+                    : undefined
+                }
+              >
+                <ColourDot colour={s.colour} size={8} />
+                {s.name}
+              </button>
+            ))}
+          </div>
 
-        <div className="mt-4 space-y-3">
-          <Row label="Source">
-            <input
-              value={form.source}
-              onChange={(e) => set("source")(e.target.value)}
-              placeholder="2024 VCAA exam, Q7b"
-              className={INPUT}
-            />
-          </Row>
-
-          <Row label="The question">
+          {/* The question and what you wrote. Given the most room, because
+              they're what you'll be re-reading in a week. */}
+          <FormField label="What were you asked?" className="mt-6">
             <textarea
               value={form.questionText}
               onChange={(e) => set("questionText")(e.target.value)}
               placeholder="Paste the question — or paste a screenshot anywhere in this dialog."
-              className={cx(INPUT, "h-20 resize-none py-2")}
+              className={cx(AREA, "h-24")}
             />
-          </Row>
+          </FormField>
 
           {image && (
-            <div className="relative">
-              <img src={image} alt="Pasted question" className="max-h-52 rounded-[var(--r-sm)] border border-[var(--line-soft)]" />
+            <div className="relative mt-3">
+              <img
+                src={image}
+                alt="Pasted question"
+                className="max-h-52 rounded-[var(--r-md)] border border-[var(--line-soft)]"
+              />
               <button
                 onClick={() => setImage(null)}
-                className="absolute right-2 top-2 rounded-full bg-black/60 p-1 text-white"
+                aria-label="Remove the screenshot"
+                className="pressable absolute right-2 top-2 rounded-full bg-black/60 p-1.5 text-white"
               >
                 <X size={12} />
               </button>
             </div>
           )}
 
-          <Row label="What I wrote">
-            <textarea
-              value={form.myAnswer}
-              onChange={(e) => set("myAnswer")(e.target.value)}
-              className={cx(INPUT, "h-16 resize-none py-2")}
-            />
-          </Row>
+          <div className="mt-5 grid gap-4 sm:grid-cols-2">
+            <FormField label="What you wrote">
+              <textarea
+                value={form.myAnswer}
+                onChange={(e) => set("myAnswer")(e.target.value)}
+                placeholder="Your answer, as you gave it."
+                className={cx(AREA, "h-20")}
+              />
+            </FormField>
+            <FormField label="What it wanted">
+              <textarea
+                value={form.correctAnswer}
+                onChange={(e) => set("correctAnswer")(e.target.value)}
+                placeholder="The mark scheme point."
+                className={cx(AREA, "h-20")}
+              />
+            </FormField>
+          </div>
 
-          <Row label="Mark scheme / correct answer">
-            <textarea
-              value={form.correctAnswer}
-              onChange={(e) => set("correctAnswer")(e.target.value)}
-              className={cx(INPUT, "h-16 resize-none py-2")}
-            />
-          </Row>
+          {/* Category as a pill grid rather than a dropdown. A select hides
+              every option but one, which makes choosing well require opening it
+              — and the recurring-mistake analysis is only as good as this
+              choice. */}
+          <section className="mt-6">
+            <div className="flex items-baseline gap-3">
+              <h3 className="text-[14px] font-medium">What went wrong?</h3>
+              {aiEnabled && (
+                <div className="ml-auto">
+                  <AiAction
+                    label="Suggest"
+                    disabled={!form.myAnswer.trim() || !form.correctAnswer.trim()}
+                    run={() =>
+                      api.aiSuggestCategory(
+                        subjectId,
+                        form.questionText,
+                        form.myAnswer,
+                        form.correctAnswer,
+                      )
+                    }
+                    onDone={(c) => {
+                      setSuggested(c);
+                      if (c) set("category")(c);
+                    }}
+                  />
+                </div>
+              )}
+            </div>
 
-          <Row label="Category">
-            <select
-              value={form.category}
-              onChange={(e) => set("category")(e.target.value)}
-              className={INPUT}
-            >
+            <div className="mt-2.5 flex flex-wrap gap-1.5">
               {categories.map((c) => (
-                <option key={c} value={c}>
+                <button
+                  key={c}
+                  onClick={() => set("category")(c)}
+                  className={cx(
+                    "pressable rounded-full border px-3 py-1.5 text-[12.5px]",
+                    form.category === c
+                      ? "border-[var(--accent)]/40 bg-[var(--accent)]/12 text-[var(--accent)]"
+                      : "border-[var(--line)] text-[var(--ink-dim)] hover:border-[var(--ink-faint)] hover:text-[var(--ink)]",
+                  )}
+                >
                   {c}
-                </option>
+                </button>
               ))}
-            </select>
-          </Row>
+            </div>
 
-          {/* Suggestion only. It moves the dropdown above; it never submits, and
-              a suggestion outside the allowed list is dropped rather than
-              guessed at — a wrong category quietly logged would corrupt the
-              recurring-mistake analysis, which is the point of this screen. */}
-          {aiEnabled && (
-            <Row label="">
-              <div className="flex items-center gap-3">
-                <AiAction
-                  label="Suggest a category"
-                  disabled={!form.myAnswer.trim() || !form.correctAnswer.trim()}
-                  run={() =>
-                    api.aiSuggestCategory(
-                      subjectId,
-                      form.questionText,
-                      form.myAnswer,
-                      form.correctAnswer,
-                    )
-                  }
-                  onDone={(c) => {
-                    setSuggested(c);
-                    if (c) set("category")(c);
-                  }}
-                />
-                {suggested === null && (
-                  <span className="text-[12px] text-[var(--ink-faint)]">
-                    Didn't match one of the categories — pick it yourself.
-                  </span>
-                )}
-                {suggested && (
-                  <span className="text-[12px] text-[var(--ink-faint)]">
-                    Suggested — change it if it's wrong.
-                  </span>
-                )}
-              </div>
-            </Row>
-          )}
+            {suggested === null && (
+              <p className="mt-2 text-[12px] text-[var(--ink-faint)]">
+                Nothing matched one of these — pick it yourself.
+              </p>
+            )}
+            {suggested && (
+              <p className="mt-2 text-[12px] text-[var(--ink-faint)]">
+                Suggested — change it if it's wrong.
+              </p>
+            )}
+          </section>
 
           {/* Command words are a 3/4 concern — the brief scopes them that way. */}
           {isThreeFour && (
-            <Row label="Command word">
+            <FormField label="Command word" className="mt-6">
               <select
                 value={form.commandWord}
                 onChange={(e) => set("commandWord")(e.target.value)}
@@ -827,63 +866,92 @@ function ComposeModal({
                   {activeWord.meaning}
                 </p>
               )}
-            </Row>
+            </FormField>
           )}
 
-          <Row label="Fix — one sentence">
+          {/* The fix. The field that actually changes behaviour, so it gets a
+              surface of its own rather than being one more row. */}
+          <section className="mt-6 rounded-[var(--r-lg)] border border-[var(--accent)]/22 bg-[var(--accent)]/6 p-4">
+            <h3 className="text-[14px] font-medium">Your fix</h3>
+            <p className="mt-0.5 text-[12.5px] text-[var(--ink-dim)]">
+              One sentence. What will you do differently next time?
+            </p>
             <input
               value={form.fix}
               onChange={(e) => set("fix")(e.target.value)}
-              placeholder="Name the bond type, don't just say 'it breaks'."
-              className={INPUT}
+              placeholder="Name the bond type — don't just say 'it breaks'."
+              className={cx(INPUT, "mt-2.5 h-10 bg-[var(--surface)] text-[13.5px]")}
             />
-          </Row>
+          </section>
 
-          <div className="flex items-center gap-2">
-            <span className="text-[12.5px] text-[var(--ink-dim)]">Marks</span>
+          <div className="mt-5 flex flex-wrap items-center gap-2">
+            <span className="text-[12.5px] text-[var(--ink-faint)]">Marks lost</span>
             <input
               type="number"
               value={form.marksLost}
               onChange={(e) => set("marksLost")(e.target.value)}
-              placeholder="lost"
-              className="tabular h-8 w-[70px] rounded-[var(--r-sm)] border border-[var(--line)] bg-[var(--surface-hi)] px-2 text-center text-[12.5px]"
+              placeholder="—"
+              className="tabular h-8 w-[62px] rounded-[var(--r-sm)] border border-[var(--line)] bg-[var(--surface-hi)] px-2 text-center text-[12.5px]"
             />
             <span className="text-[12.5px] text-[var(--ink-faint)]">of</span>
             <input
               type="number"
               value={form.marksAvailable}
               onChange={(e) => set("marksAvailable")(e.target.value)}
-              placeholder="total"
-              className="tabular h-8 w-[70px] rounded-[var(--r-sm)] border border-[var(--line)] bg-[var(--surface-hi)] px-2 text-center text-[12.5px]"
+              placeholder="—"
+              className="tabular h-8 w-[62px] rounded-[var(--r-sm)] border border-[var(--line)] bg-[var(--surface-hi)] px-2 text-center text-[12.5px]"
+            />
+
+            <input
+              value={form.source}
+              onChange={(e) => set("source")(e.target.value)}
+              placeholder="Where from? e.g. 2024 VCAA, Q7b"
+              className={cx(INPUT, "ml-auto h-8 max-w-[260px] flex-1 text-[12.5px]")}
             />
           </div>
+
+          {error && <p className="mt-4 text-[12.5px] text-[var(--danger)]">{error}</p>}
         </div>
 
-        {error && <div className="mt-3 text-[12.5px] text-[var(--danger)]">{error}</div>}
-
-        <div className="mt-5 flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant="primary" disabled={busy || !form.category} onClick={save}>
-            Log it
-          </Button>
-        </div>
+        <footer className="flex shrink-0 items-center gap-2 border-t border-[var(--line-soft)] px-7 py-4">
+          <p className="text-[12px] text-[var(--ink-faint)]">
+            You'll re-attempt this blind in a week.
+          </p>
+          <div className="ml-auto flex gap-2">
+            <Button variant="ghost" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button variant="primary" disabled={busy || !form.category} onClick={save}>
+              {busy ? "Saving…" : "Log it"}
+            </Button>
+          </div>
+        </footer>
       </div>
     </div>
   );
 }
 
+/** A labelled form field. Sentence case at readable size, not a micro-caps tag. */
+function FormField({
+  label,
+  children,
+  className,
+}: {
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      <label className="mb-1.5 block text-[13px] font-medium text-[var(--ink)]">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+const AREA =
+  "w-full resize-none rounded-[var(--r-md)] border border-[var(--line)] bg-[var(--surface-hi)] p-3 text-[13.5px] leading-relaxed text-[var(--ink)] placeholder:text-[var(--ink-faint)] outline-none focus:border-[var(--accent)]";
+
 const INPUT =
   "w-full rounded-[var(--r-sm)] border border-[var(--line)] bg-[var(--surface-hi)] px-2.5 text-[13px] text-[var(--ink)] h-8 focus:border-[var(--accent)]";
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-[11px] uppercase tracking-[0.07em] text-[var(--ink-faint)]">
-        {label}
-      </span>
-      {children}
-    </label>
-  );
-}

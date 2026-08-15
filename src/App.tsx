@@ -23,11 +23,27 @@ import { clock } from "./lib/format";
 import type { FinishedSession, TimerSnapshot } from "./lib/types";
 import { useApp, type Route } from "./store";
 
-const NAV: { route: Route; label: string; Icon: typeof Home; onlyIf?: (s: AppSubjects) => boolean }[] = [
+type NavItem = {
+  route: Route;
+  label: string;
+  Icon: typeof Home;
+  onlyIf?: (s: AppSubjects) => boolean;
+};
+
+/** Grouped so the list reads as three short columns rather than ten equal rows. */
+const NAV_GROUPS: { heading: string; items: NavItem[] }[] = [
+  {
+    heading: "Study",
+    items: [
   { route: "today", label: "Today", Icon: Home },
   { route: "timer", label: "Timer", Icon: TimerIcon },
   { route: "inbox", label: "Inbox", Icon: InboxIcon },
   { route: "review", label: "Review", Icon: Layers },
+    ],
+  },
+  {
+    heading: "Learn",
+    items: [
   { route: "errors", label: "Error log", Icon: ClipboardList },
   { route: "assessments", label: "Assessments", Icon: CalendarClock },
   // Only shown when there is actually a Biology 3/4 subject — a nav item that
@@ -40,8 +56,15 @@ const NAV: { route: Route; label: string; Icon: typeof Home; onlyIf?: (s: AppSub
   },
   { route: "assistant", label: "Assistant", Icon: MessageSquare },
   { route: "library", label: "Library", Icon: BookMarked },
+    ],
+  },
+  {
+    heading: "You",
+    items: [
   { route: "progress", label: "Progress", Icon: BarChart3 },
   { route: "settings", label: "Settings", Icon: SettingsIcon },
+    ],
+  },
 ];
 
 type AppSubjects = ReturnType<typeof useApp.getState>["subjects"];
@@ -92,45 +115,57 @@ export default function App() {
             the window uses an overlay title bar. */}
         <div className="titlebar-drag h-11 shrink-0" />
 
-        <div className="flex flex-1 flex-col gap-0.5 px-2.5 py-2">
-          {NAV.filter((n) => !n.onlyIf || n.onlyIf(subjects)).map(({ route: r, label, Icon }) => (
-            <button
-              key={r}
-              onClick={() => {
-                setRoute(r);
-                if (r === "today" || r === "progress") void refreshProgress();
-              }}
-              aria-current={route === r ? "page" : undefined}
-              className={cx(
-                "pressable group relative flex items-center gap-2.5 rounded-[var(--r-md)]",
-                "px-2.5 py-[7px] text-[13.5px] text-left",
-                route === r
-                  ? "font-medium text-[var(--ink)]"
-                  : "text-[var(--ink-dim)] hover:bg-[var(--surface-hi)]/70 hover:text-[var(--ink)]",
-              )}
-              style={
-                route === r
-                  ? {
-                      // A tinted pill rather than a saturated blue block: the
-                      // active route should read as a selected object, not a
-                      // web-app button.
-                      background: "color-mix(in srgb, var(--accent) 13%, transparent)",
-                      boxShadow: "inset 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent)",
-                    }
-                  : undefined
-              }
-            >
-              <Icon
-                size={15.5}
-                strokeWidth={1.9}
-                className={cx(
-                  "shrink-0 transition-colors duration-[var(--t-fast)]",
-                  route === r ? "text-[var(--accent)]" : "",
-                )}
-              />
-              <span className="truncate">{label}</span>
-            </button>
-          ))}
+        <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-2.5 py-2">
+          {NAV_GROUPS.map((group) => {
+            const items = group.items.filter((n) => !n.onlyIf || n.onlyIf(subjects));
+            if (items.length === 0) return null;
+
+            return (
+              <div key={group.heading}>
+                <div className="px-2.5 pb-1.5 text-[11px] font-medium tracking-[0.04em] text-[var(--ink-faint)]">
+                  {group.heading}
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  {items.map(({ route: r, label, Icon }) => (
+                    <button
+                      key={r}
+                      onClick={() => {
+                        setRoute(r);
+                        if (r === "today" || r === "progress") void refreshProgress();
+                      }}
+                      aria-current={route === r ? "page" : undefined}
+                      className={cx(
+                        "pressable group relative flex items-center gap-2.5 rounded-[var(--r-sm)]",
+                        "px-2.5 py-[6px] text-left text-[13.5px]",
+                        route === r
+                          ? "font-medium text-[var(--ink)]"
+                          : "text-[var(--ink-dim)] hover:bg-[var(--surface-hi)] hover:text-[var(--ink)]",
+                      )}
+                      style={
+                        route === r
+                          ? {
+                              // A tinted capsule, not a saturated block: the
+                              // active route should read as a selected object.
+                              background: "color-mix(in srgb, var(--accent) 11%, transparent)",
+                            }
+                          : undefined
+                      }
+                    >
+                      <Icon
+                        size={16}
+                        strokeWidth={1.85}
+                        className={cx(
+                          "shrink-0 transition-colors duration-[var(--t-fast)]",
+                          route === r ? "text-[var(--accent)]" : "",
+                        )}
+                      />
+                      <span className="truncate">{label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         {timer && (

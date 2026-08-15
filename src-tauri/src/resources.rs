@@ -352,6 +352,53 @@ pub fn add(
     Ok(id)
 }
 
+/// Re-chunk anything whose text is present but whose chunks are gone.
+///
+/// Migration 005 rebuilt the `resources` table. With `foreign_keys = ON` — which
+/// is how the app opens the database — SQLite's `DROP TABLE` runs an implicit
+/// `DELETE FROM` first, and that fired `resource_chunks`' `ON DELETE CASCADE`.
+/// Every chunk of every uploaded resource was deleted, and the `'rebuild'` of
+/// the FTS index that followed dutifully rebuilt it from nothing. The library
+/// still listed six study designs; searching them returned nothing.
+///
+/// The text itself was never lost — `resources.content` came through the rebuild
+/// intact — so this re-derives the chunks from it with the ordinary chunker.
+///
+/// Runs at startup. Cheap when there's nothing to do: one indexed count per
+/// resource, and no writes.
+pub fn reindex_missing(conn: &mut Connection) -> Result<usize> {
+    let stale: Vec<(i64, String)> = {
+        let mut stmt = conn.prepare(
+            "SELECT r.id, r.content FROM resources r
+              WHERE length(r.content) > 0
+                AND NOT EXISTS (SELECT 1 FROM resource_chunks c WHERE c.resource_id = r.id)",
+        )?;
+        let rows = stmt
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+        rows
+    };
+
+    if stale.is_empty() {
+        return Ok(0);
+    }
+
+    let tx = conn.transaction()?;
+    {
+        let mut stmt = tx.prepare(
+            "INSERT INTO resource_chunks (resource_id, ordinal, content) VALUES (?1,?2,?3)",
+        )?;
+        for (id, content) in &stale {
+            for (i, piece) in chunk(content).into_iter().enumerate() {
+                stmt.execute(rusqlite::params![id, i as i64, piece])?;
+            }
+        }
+    }
+    tx.commit()?;
+
+    Ok(stale.len())
+}
+
 pub fn list(conn: &Connection, subject_id: Option<i64>) -> Result<Vec<Resource>> {
     let mut stmt = conn.prepare(
         "SELECT r.id, r.subject_id, s.name, r.title, r.kind, r.source, r.word_count,

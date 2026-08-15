@@ -30,6 +30,8 @@ const MIGRATIONS: &[(i32, &str)] = &[
     (4, include_str!("db/migrations/004_assistant.sql")),
     (5, include_str!("db/migrations/005_taxonomy_and_blocks.sql")),
     (6, include_str!("db/migrations/006_capture_attachments.sql")),
+    (7, include_str!("db/migrations/007_block_links.sql")),
+    (8, include_str!("db/migrations/008_plan.sql")),
 ];
 
 /// How many automatic snapshots to keep before deleting the oldest.
@@ -191,3 +193,7 @@ fn prune_snapshots(dir: &Path) -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "db/tests.rs"]
+mod tests;

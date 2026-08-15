@@ -11,6 +11,7 @@ mod ingest;
 mod inbox;
 mod models;
 mod notifications;
+mod plan;
 mod provider;
 mod resources;
 mod ai;
@@ -75,12 +76,20 @@ pub fn run() {
             //   ~/Library/Application Support/com.armankundu.retain
             // derived from the bundle identifier in tauri.conf.json.
             let data_dir = handle.path().app_data_dir()?;
-            let connection = db::open(&data_dir)?;
+            let mut connection = db::open(&data_dir)?;
 
             // Snapshot on every launch. Cheap, and it means yesterday's database
             // is always recoverable. See docs/icloud-sqlite-analysis.md.
             if let Err(e) = db::snapshot(&connection, &data_dir) {
                 eprintln!("[retain] could not write startup snapshot: {e}");
+            }
+
+            // Restore any search index lost to migration 005's cascade. See
+            // `resources::reindex_missing`. A no-op once it has run.
+            match resources::reindex_missing(&mut connection) {
+                Ok(0) => {}
+                Ok(n) => eprintln!("[retain] re-indexed {n} resource(s) whose chunks were missing"),
+                Err(e) => eprintln!("[retain] could not re-index the library: {e}"),
             }
 
             // Bring freeze accounting up to date for any days that passed while
@@ -89,6 +98,24 @@ pub fn run() {
                 if let Err(e) = streak::reconcile(&connection, threshold) {
                     eprintln!("[retain] streak reconcile failed: {e}");
                 }
+            }
+
+            // Walk anything you didn't get to onto a day that has room for it.
+            // Done here rather than on the frontend so it happens even when the
+            // window was never opened — you close the laptop on Tuesday and
+            // Wednesday's plan is already correct when you come back.
+            //
+            // The result is recomputed by the frontend on mount; this pass only
+            // needs to leave the database right.
+            let today = chrono::Local::now().date_naive();
+            match plan::rolled_today(&connection, today) {
+                Ok(false) => {
+                    if let Err(e) = plan::rollover(&connection, today) {
+                        eprintln!("[retain] plan rollover failed: {e}");
+                    }
+                }
+                Ok(true) => {}
+                Err(e) => eprintln!("[retain] could not read the rollover stamp: {e}"),
             }
 
             let state = AppState {
@@ -212,6 +239,14 @@ pub fn run() {
             commands::create_block,
             commands::update_block,
             commands::delete_block,
+            commands::open_block_link,
+            commands::plan_for_date,
+            commands::plan_between,
+            commands::create_plan_item,
+            commands::set_plan_status,
+            commands::move_plan_item,
+            commands::delete_plan_item,
+            commands::run_rollover,
             commands::preview_intervals,
             // Resources and the saved-output library.
             commands::list_resources,

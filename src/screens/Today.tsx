@@ -14,6 +14,7 @@
 import { useEffect, useState } from "react";
 import { ArrowRight, Flame, Layers, Play, Shield } from "lucide-react";
 
+import { DayPlan } from "../components/DayPlan";
 import { GoalRing } from "../components/GoalRing";
 import { UpcomingEvents } from "../components/UpcomingEvents";
 import { SectionHeader, SubjectPill } from "../components/primitives";
@@ -24,23 +25,37 @@ import { duration, greeting, timeOfDay } from "../lib/format";
 import { useApp, type Route } from "../store";
 
 export function Today() {
-  const { boot, streak, rings, recent, setRoute, timer } = useApp();
+  const { boot, streak, rings, recent, subjects, setRoute, timer } = useApp();
 
   const [counts, setCounts] = useState<QueueCounts | null>(null);
   const [assessments, setAssessments] = useState<Assessment[]>([]);
 
   useEffect(() => {
     // Both are optional context — a failure costs the line, not the screen.
-    void api.reviewCounts().then(setCounts).catch(() => setCounts(null));
-    void api.listAssessments(false).then(setAssessments).catch(() => setAssessments([]));
+    void api
+      .reviewCounts()
+      .then(setCounts)
+      .catch(() => setCounts(null));
+    void api
+      .listAssessments(false)
+      .then(setAssessments)
+      .catch(() => setAssessments([]));
   }, []);
 
   const activeMinutes = streak?.todayActiveMinutes ?? 0;
   const threshold = streak?.thresholdMinutes ?? 20;
-  const dayProgress = Math.min(1, threshold > 0 ? activeMinutes / threshold : 0);
+  const dayProgress = Math.min(
+    1,
+    threshold > 0 ? activeMinutes / threshold : 0,
+  );
   const soon = assessments.filter((a) => a.daysAway >= 0 && a.daysAway <= 14);
 
-  const next = nextAction({ counts, assessments: soon, timer: !!timer, activeMinutes });
+  const next = nextAction({
+    counts,
+    assessments: soon,
+    timer: !!timer,
+    activeMinutes,
+  });
 
   return (
     <div className="mx-auto w-full max-w-[min(1100px,100%)] px-6 pb-16 sm:px-10">
@@ -51,7 +66,11 @@ export function Today() {
           {greeting(boot?.userName ?? "")}
         </h1>
         <p className="mt-1.5 text-[15px] leading-relaxed text-[var(--ink-dim)]">
-          {openingLine(activeMinutes, streak?.todayQualified ?? false, threshold)}
+          {openingLine(
+            activeMinutes,
+            streak?.todayQualified ?? false,
+            threshold,
+          )}
         </p>
       </header>
 
@@ -105,7 +124,11 @@ export function Today() {
       {/* Supporting figures, quiet by design. */}
       <div className="animate-rise mb-9 flex flex-wrap items-center gap-x-7 gap-y-3 px-1">
         <Figure
-          value={activeMinutes >= 60 ? duration(activeMinutes * 60) : `${activeMinutes}m`}
+          value={
+            activeMinutes >= 60
+              ? duration(activeMinutes * 60)
+              : `${activeMinutes}m`
+          }
           label="focused today"
         />
         {counts && counts.dueReviews + counts.newRemainingTotal > 0 && (
@@ -127,17 +150,29 @@ export function Today() {
             value={streak.current}
             label={streak.current === 1 ? "day running" : "days running"}
             accent="var(--warn)"
-            icon={<Flame size={15} strokeWidth={2} className="text-[var(--warn)]" />}
+            icon={
+              <Flame size={15} strokeWidth={2} className="text-[var(--warn)]" />
+            }
           />
         )}
         {streak && streak.freezesAvailable > 0 && (
           <Figure
             value={streak.freezesAvailable}
-            label={streak.freezesAvailable === 1 ? "freeze ready" : "freezes ready"}
-            icon={<Shield size={14} strokeWidth={2} className="text-[var(--ink-faint)]" />}
+            label={
+              streak.freezesAvailable === 1 ? "freeze ready" : "freezes ready"
+            }
+            icon={
+              <Shield
+                size={14}
+                strokeWidth={2}
+                className="text-[var(--ink-faint)]"
+              />
+            }
           />
         )}
       </div>
+
+      <DayPlan subjects={subjects} />
 
       {rings.length > 0 && (
         <section className="animate-rise mb-9">
@@ -160,7 +195,8 @@ export function Today() {
               Nothing logged yet
             </div>
             <p className="mx-auto mt-1.5 max-w-[400px] text-[13px] leading-relaxed text-[var(--ink-faint)]">
-              Sessions appear here once you've finished one, with whatever you noted at the time.
+              Sessions appear here once you've finished one, with whatever you
+              noted at the time.
             </p>
           </div>
         ) : (
@@ -176,7 +212,9 @@ export function Today() {
 
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline gap-2">
-                    <span className="text-[13.5px] text-[var(--ink)]">{s.subjectName}</span>
+                    <span className="text-[13.5px] text-[var(--ink)]">
+                      {s.subjectName}
+                    </span>
                     {s.topicName && (
                       <span className="truncate text-[12px] text-[var(--ink-faint)]">
                         {s.topicName}
@@ -191,7 +229,8 @@ export function Today() {
                   {s.pauseCount > 0 && (
                     <div className="mt-0.5 text-[11.5px] text-[var(--ink-faint)]">
                       {s.pauseCount} {s.pauseCount === 1 ? "pause" : "pauses"}
-                      {s.idlePauseCount > 0 && ` · ${s.idlePauseCount} from inactivity`}
+                      {s.idlePauseCount > 0 &&
+                        ` · ${s.idlePauseCount} from inactivity`}
                     </div>
                   )}
                 </div>
@@ -245,7 +284,8 @@ function nextAction({
     return {
       eyebrow: "In progress",
       title: "You're in a session",
-      detail: "The dock at the bottom keeps the clock while you work anywhere in Retain.",
+      detail:
+        "The dock at the bottom keeps the clock while you work anywhere in Retain.",
       action: "Open the timer",
       route: "timer",
       icon: <Play size={16} />,
@@ -305,7 +345,11 @@ function nextAction({
 }
 
 /** The greeting's second line. Never mentions what's been missed or lost. */
-function openingLine(minutes: number, qualified: boolean, threshold: number): string {
+function openingLine(
+  minutes: number,
+  qualified: boolean,
+  threshold: number,
+): string {
   if (qualified && minutes >= 60) {
     const h = Math.floor(minutes / 60);
     return `${h} ${h === 1 ? "hour" : "hours"} in today. Anything more is a bonus.`;
@@ -335,7 +379,15 @@ function DayRing({
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90" aria-hidden>
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={stroke} stroke={colour} opacity={0.13} />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          strokeWidth={stroke}
+          stroke={colour}
+          opacity={0.13}
+        />
         <circle
           cx={size / 2}
           cy={size / 2}
@@ -355,7 +407,9 @@ function DayRing({
           style={{ color: qualified ? "var(--color-positive)" : "var(--ink)" }}
         >
           {minutes}
-          <span className="text-[13px] font-normal text-[var(--ink-faint)]">m</span>
+          <span className="text-[13px] font-normal text-[var(--ink-faint)]">
+            m
+          </span>
         </div>
         <div className="mt-1 text-[10.5px] text-[var(--ink-faint)]">
           {qualified ? "day earned" : "today"}

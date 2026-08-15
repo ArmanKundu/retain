@@ -38,6 +38,8 @@ pub struct TimeBlock {
     pub subject_name: Option<String>,
     pub colour: Option<String>,
     pub note: Option<String>,
+    /// A meeting URL, opened in the browser from the week grid.
+    pub link: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -52,6 +54,7 @@ pub struct NewBlock {
     pub available: bool,
     pub subject_id: Option<i64>,
     pub note: Option<String>,
+    pub link: Option<String>,
 }
 
 /// Validate before touching the database.
@@ -77,6 +80,13 @@ pub fn validate(b: &NewBlock) -> Result<()> {
     if b.start_min < 0 || b.end_min > 1440 {
         return Err(anyhow!("A block has to fit inside one day."));
     }
+    // Anything the app will later hand to the OS opener has to be checked here,
+    // where the error can still be shown next to the field.
+    if let Some(link) = b.link.as_deref().map(str::trim).filter(|l| !l.is_empty()) {
+        if !link.starts_with("https://") && !link.starts_with("http://") {
+            return Err(anyhow!("A meeting link should start with https://"));
+        }
+    }
     Ok(())
 }
 
@@ -84,8 +94,9 @@ pub fn create(conn: &Connection, b: &NewBlock, now: DateTime<Utc>) -> Result<i64
     validate(b)?;
     conn.execute(
         "INSERT INTO time_blocks
-           (title, kind, weekday, on_date, start_min, end_min, available, subject_id, note, created_at)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+           (title, kind, weekday, on_date, start_min, end_min, available, subject_id, note,
+            link, created_at)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
         rusqlite::params![
             b.title.trim(),
             b.kind,
@@ -96,6 +107,7 @@ pub fn create(conn: &Connection, b: &NewBlock, now: DateTime<Utc>) -> Result<i64
             b.available as i64,
             b.subject_id,
             b.note,
+            b.link.as_deref().map(str::trim).filter(|l| !l.is_empty()),
             util::rfc3339(now),
         ],
     )?;
@@ -107,7 +119,7 @@ pub fn update(conn: &Connection, id: i64, b: &NewBlock) -> Result<()> {
     conn.execute(
         "UPDATE time_blocks
             SET title = ?2, kind = ?3, weekday = ?4, on_date = ?5, start_min = ?6,
-                end_min = ?7, available = ?8, subject_id = ?9, note = ?10
+                end_min = ?7, available = ?8, subject_id = ?9, note = ?10, link = ?11
           WHERE id = ?1",
         rusqlite::params![
             id,
@@ -120,6 +132,7 @@ pub fn update(conn: &Connection, id: i64, b: &NewBlock) -> Result<()> {
             b.available as i64,
             b.subject_id,
             b.note,
+            b.link.as_deref().map(str::trim).filter(|l| !l.is_empty()),
         ],
     )?;
     Ok(())
@@ -144,11 +157,12 @@ fn row(r: &rusqlite::Row<'_>) -> rusqlite::Result<TimeBlock> {
         subject_name: r.get(9)?,
         colour: r.get(10)?,
         note: r.get(11)?,
+        link: r.get(12)?,
     })
 }
 
 const SELECT: &str = "SELECT b.id, b.title, b.kind, b.weekday, b.on_date, b.start_min,
-                             b.end_min, b.available, b.subject_id, s.name, s.colour, b.note
+                             b.end_min, b.available, b.subject_id, s.name, s.colour, b.note, b.link
                         FROM time_blocks b LEFT JOIN subjects s ON s.id = b.subject_id";
 
 /// Every block, for the editor.

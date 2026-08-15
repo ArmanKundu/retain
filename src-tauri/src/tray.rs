@@ -139,13 +139,22 @@ pub fn update(handles: &TrayHandles, snapshot: Option<&TimerSnapshot>) {
             // bar should agree with what the session will actually be worth.
             let clock = format_clock(s.active_seconds);
 
+            // The word "paused" spelled out took more menu-bar width than the
+            // clock itself, and the menu bar is the most contested space on the
+            // screen. A leading glyph carries the same state in one character:
+            // a filled dot is running, a hollow one is stopped, and the reason
+            // is in the menu you open to act on it anyway.
+            //
+            // Space-separated rather than concatenated — macOS renders the
+            // title in a proportional font, and the glyph needs the gap to
+            // avoid touching the first digit.
             let title = match s.paused_reason {
-                // A paused clock that keeps looking like a running clock is a lie
-                // you notice an hour later, so paused state is visible at a glance.
-                Some(PauseReason::Manual) => format!("{clock} paused"),
-                Some(PauseReason::Idle) => format!("{clock} idle"),
-                Some(PauseReason::Break) => format!("{clock} break"),
-                None => clock,
+                Some(PauseReason::Manual) => format!("◦ {clock}"),
+                // Idle and break are still *paused*, but not by you. Same
+                // hollow glyph, because the distinction that matters in the
+                // menu bar is only "is this counting".
+                Some(PauseReason::Idle) | Some(PauseReason::Break) => format!("◦ {clock}"),
+                None => format!("● {clock}"),
             };
             let _ = handles.icon.set_title(Some(title));
 
@@ -154,7 +163,16 @@ pub fn update(handles: &TrayHandles, snapshot: Option<&TimerSnapshot>) {
                 .as_ref()
                 .map(|t| format!(" · {t}"))
                 .unwrap_or_default();
-            let _ = handles.status.set_text(format!("{}{}", s.subject_name, topic));
+            // The reason lives here, where there's room for it and where you
+            // are when you decide what to do about it.
+            let _ = handles.status.set_text(match s.paused_reason {
+                Some(PauseReason::Manual) => format!("{}{} — paused", s.subject_name, topic),
+                Some(PauseReason::Idle) => {
+                    format!("{}{} — paused, you went quiet", s.subject_name, topic)
+                }
+                Some(PauseReason::Break) => format!("{}{} — on a break", s.subject_name, topic),
+                None => format!("{}{}", s.subject_name, topic),
+            });
 
             let _ = handles.pause_resume.set_text(if s.paused_reason.is_some() {
                 "Resume"

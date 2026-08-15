@@ -22,7 +22,7 @@ use crate::models::*;
 use crate::timer::{self, ActiveTimer, SharedTimer};
 use crate::tray::TrayHandles;
 use crate::scheduler;
-use crate::{ai, assessments, assistant, biology, blocks, capture, ics, ingest, library, resources, update, workspace, cards, errors, export, inbox, notifications, provider, secrets, settings, streak, subjects};
+use crate::{ai, assessments, assistant, biology, blocks, capture, ics, ingest, library, resources, update, workspace, cards, errors, export, inbox, notifications, plan, provider, secrets, settings, streak, subjects};
 
 /// Shared state, created in `lib.rs` and handed to every command.
 pub struct AppState {
@@ -2304,4 +2304,84 @@ fn encode_base64(bytes: &[u8]) -> String {
         out.push(if chunk.len() > 2 { TABLE[(n & 63) as usize] as char } else { '=' });
     }
     out
+}
+
+/// Open a meeting link from a time block.
+///
+/// The URL is re-checked against the stored row rather than trusted from the
+/// frontend — this hands a string to the OS, so it only ever accepts an HTTP(S)
+/// link that Retain itself saved.
+#[tauri::command]
+pub fn open_block_link(state: State<'_, AppState>, app: AppHandle, id: i64) -> CmdResult<()> {
+    let link: Option<String> = {
+        let conn = db(&state);
+        conn.query_row("SELECT link FROM time_blocks WHERE id = ?1", [id], |r| r.get(0))
+            .map_err(|_| CommandError("That block no longer exists.".into()))?
+    };
+
+    let link = link
+        .filter(|l| l.starts_with("https://") || l.starts_with("http://"))
+        .ok_or_else(|| CommandError("That block has no meeting link.".into()))?;
+
+    tauri_plugin_opener::OpenerExt::opener(&app)
+        .open_url(link, None::<&str>)
+        .map_err(|e| CommandError(e.to_string()))?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// The plan — what you meant to do, and where it goes when a day slips
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn plan_for_date(state: State<'_, AppState>, local_date: String) -> CmdResult<Vec<plan::PlanItem>> {
+    Ok(plan::for_date(&db(&state), &local_date)?)
+}
+
+#[tauri::command]
+pub fn plan_between(
+    state: State<'_, AppState>,
+    from: String,
+    to: String,
+) -> CmdResult<Vec<plan::PlanItem>> {
+    Ok(plan::between(&db(&state), &from, &to)?)
+}
+
+#[tauri::command]
+pub fn create_plan_item(state: State<'_, AppState>, item: plan::NewPlanItem) -> CmdResult<i64> {
+    Ok(plan::create(&db(&state), &item, chrono::Utc::now())?)
+}
+
+#[tauri::command]
+pub fn set_plan_status(state: State<'_, AppState>, id: i64, status: String) -> CmdResult<()> {
+    Ok(plan::set_status(&db(&state), id, &status, chrono::Utc::now())?)
+}
+
+#[tauri::command]
+pub fn move_plan_item(state: State<'_, AppState>, id: i64, local_date: String) -> CmdResult<()> {
+    Ok(plan::move_to(&db(&state), id, &local_date)?)
+}
+
+#[tauri::command]
+pub fn delete_plan_item(state: State<'_, AppState>, id: i64) -> CmdResult<()> {
+    Ok(plan::delete(&db(&state), id)?)
+}
+
+/// Walk anything left behind onto days that can take it.
+///
+/// `force` re-runs a pass that has already happened today, which is what the
+/// "reshuffle" button in Today does — you've just added a shift on Thursday and
+/// want the plan to account for it without waiting until tomorrow.
+#[tauri::command]
+pub fn run_rollover(state: State<'_, AppState>, force: bool) -> CmdResult<plan::Rollover> {
+    let conn = db(&state);
+    // The real calendar date, not the 4am study day. Rollover is about which
+    // days on a calendar have room in them; at 2am on Wednesday the work you
+    // missed "today" is Tuesday's, and Tuesday is genuinely over.
+    let today = chrono::Local::now().date_naive();
+
+    if !force && plan::rolled_today(&conn, today)? {
+        return Ok(plan::Rollover::default());
+    }
+    Ok(plan::rollover(&conn, today)?)
 }

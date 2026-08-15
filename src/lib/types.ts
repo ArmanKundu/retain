@@ -353,7 +353,11 @@ export interface TopicRow {
 
 // --- Notifications --------------------------------------------------------
 
-export type NotificationCategory = "reviews" | "assessments" | "topic_decay" | "streak";
+export type NotificationCategory =
+  | "reviews"
+  | "assessments"
+  | "topic_decay"
+  | "streak";
 
 export interface NotificationSettings {
   enabled: boolean;
@@ -540,7 +544,13 @@ export interface DeckSummary {
 
 export type UpdateStatus =
   | { status: "upToDate"; current: string }
-  | { status: "available"; current: string; latest: string; url: string; notes: string | null }
+  | {
+      status: "available";
+      current: string;
+      latest: string;
+      url: string;
+      notes: string | null;
+    }
   /** Distinct from upToDate on purpose: we never got an answer. */
   | { status: "unknown"; current: string; reason: string };
 
@@ -645,7 +655,13 @@ export interface SubjectFolder {
 
 /** What happened to one file during import. */
 export type Outcome =
-  | { status: "extracted"; path: string; name: string; text: string; words: number }
+  | {
+      status: "extracted";
+      path: string;
+      name: string;
+      text: string;
+      words: number;
+    }
   /** A PDF whose pages are images — there is no text to extract. */
   | { status: "scanned"; path: string; name: string }
   | { status: "unsupported"; path: string; name: string; reason: string }
@@ -746,6 +762,8 @@ export interface TimeBlock {
   subjectName: string | null;
   colour: string | null;
   note: string | null;
+  /** A meeting URL, opened in the browser from the week grid. */
+  link: string | null;
 }
 
 export interface NewBlock {
@@ -758,6 +776,7 @@ export interface NewBlock {
   available: boolean;
   subjectId: number | null;
   note: string | null;
+  link: string | null;
 }
 
 /** Something attached to a quick capture — a screenshot, or a file's text. */
@@ -774,4 +793,56 @@ export interface CaptureAttachment {
   kind: "image" | "text";
   imageDataUrl: string | null;
   text: string | null;
+}
+
+/**
+ * One intention: a thing you meant to do, on a day.
+ *
+ * `firstPlannedOn` and `moves` exist so the UI can say "you've been meaning to
+ * do this since Tuesday" — a plan that quietly rewrites its own history can't
+ * tell you the one thing worth knowing.
+ */
+export interface PlanItem {
+  id: number;
+  subjectId: number | null;
+  subjectName: string | null;
+  colour: string | null;
+  title: string;
+  detail: string | null;
+  plannedOn: string;
+  firstPlannedOn: string;
+  estMinutes: number;
+  dueOn: string | null;
+  status: "planned" | "done" | "skipped";
+  moves: number;
+  source: "manual" | "ai" | "assessment";
+}
+
+export interface NewPlanItem {
+  subjectId: number | null;
+  title: string;
+  detail: string | null;
+  plannedOn: string;
+  estMinutes: number;
+  dueOn: string | null;
+  source: string | null;
+}
+
+/** What rollover did, so the change can be shown rather than just applied. */
+export interface Rollover {
+  moved: {
+    id: number;
+    title: string;
+    subjectName: string | null;
+    from: string;
+    to: string;
+    moves: number;
+  }[];
+  stuck: {
+    id: number;
+    title: string;
+    subjectName: string | null;
+    from: string;
+    reason: string;
+  }[];
 }

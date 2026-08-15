@@ -286,6 +286,12 @@ pub fn app_context(conn: &Connection) -> String {
     let commitments = crate::blocks::week_summary(conn, crate::util::retain_today_naive())
         .unwrap_or_default();
 
+    // What they meant to do today, and what has been slipping. Without this the
+    // assistant answers "what should I work on?" from scratch every time and
+    // ignores the plan sitting on the screen next to it.
+    let today_plan = crate::plan::summary(conn, chrono::Local::now().date_naive())
+        .unwrap_or_default();
+
     if lines.is_empty() && commitments.is_empty() {
         return String::new();
     }
@@ -297,6 +303,10 @@ pub fn app_context(conn: &Connection) -> String {
     if !commitments.is_empty() {
         out.push('\n');
         out.push_str(&commitments);
+    }
+    if !today_plan.is_empty() {
+        out.push('\n');
+        out.push_str(&today_plan);
     }
     out
 }

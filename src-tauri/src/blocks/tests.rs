@@ -28,6 +28,7 @@ fn weekly(title: &str, weekday: i64, start: i64, end: i64) -> NewBlock {
         available: false,
         subject_id: None,
         note: None,
+        link: None,
     }
 }
 
@@ -45,6 +46,7 @@ fn block(start: i64, end: i64, available: bool) -> TimeBlock {
         subject_name: None,
         colour: None,
         note: None,
+        link: None,
     }
 }
 
@@ -128,6 +130,7 @@ fn a_date_sees_both_its_weekly_and_its_dated_blocks() {
             available: false,
             subject_id: None,
             note: None,
+            link: None,
         },
         now(),
     )
@@ -248,4 +251,43 @@ fn clock_reads_the_way_people_say_times() {
     assert_eq!(clock(12 * 60), "12pm");
     assert_eq!(clock(13 * 60 + 30), "1:30pm");
     assert_eq!(clock(23 * 60 + 5), "11:05pm");
+}
+
+// -- meeting links ----------------------------------------------------------
+
+#[test]
+fn a_meeting_link_round_trips() {
+    let conn = db();
+    let mut b = weekly("Tuition", 1, 16 * 60, 18 * 60);
+    b.link = Some("https://zoom.us/j/123456".into());
+    create(&conn, &b, now()).unwrap();
+
+    assert_eq!(all(&conn).unwrap()[0].link.as_deref(), Some("https://zoom.us/j/123456"));
+}
+
+/// Checked here so the message can appear beside the field, and so nothing but
+/// an HTTP(S) URL can ever reach the OS opener.
+#[test]
+fn a_link_that_is_not_http_is_refused() {
+    let mut b = weekly("Dodgy", 0, 600, 700);
+
+    for bad in ["file:///etc/passwd", "javascript:alert(1)", "zoom.us/j/1"] {
+        b.link = Some(bad.into());
+        let err = validate(&b).unwrap_err().to_string();
+        assert!(err.contains("https://"), "{bad}: {err}");
+    }
+
+    b.link = Some("https://teams.microsoft.com/l/x".into());
+    assert!(validate(&b).is_ok());
+}
+
+#[test]
+fn a_blank_link_is_stored_as_nothing_rather_than_an_empty_string() {
+    let conn = db();
+    let mut b = weekly("No link", 0, 600, 700);
+    b.link = Some("   ".into());
+
+    assert!(validate(&b).is_ok(), "blank should not trip the scheme check");
+    create(&conn, &b, now()).unwrap();
+    assert_eq!(all(&conn).unwrap()[0].link, None);
 }

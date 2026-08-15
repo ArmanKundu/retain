@@ -8,9 +8,22 @@
 -- weights them differently, so they have to be distinguishable.
 --
 -- SQLite can't widen a CHECK constraint in place, so the table is rebuilt.
--- Everything is copied first and the FTS index is regenerated from the copy —
--- losing a year of indexed material to a schema change would be unforgivable.
+--
+-- The rebuild has a trap in it, and this migration originally fell into it.
+-- `resource_chunks.resource_id` cascades on delete, and with `foreign_keys = ON`
+-- — which is how the app opens the database — SQLite performs an implicit
+-- `DELETE FROM resources` before `DROP TABLE resources`. That fires the cascade
+-- and deletes every chunk of every uploaded resource. The FTS `'rebuild'` below
+-- then rebuilds the index from an empty table and reports success, so the
+-- library still lists your files and searching them silently returns nothing.
+--
+-- `PRAGMA foreign_keys` is a no-op inside a transaction and each migration runs
+-- in one, so the chunks are copied aside and put back instead.
 -- ---------------------------------------------------------------------------
+
+-- Survives the cascade because it is not a child of `resources`.
+CREATE TEMP TABLE chunks_backup AS
+    SELECT id, resource_id, ordinal, content FROM resource_chunks;
 
 CREATE TABLE resources_new (
     id          INTEGER PRIMARY KEY,
@@ -46,8 +59,18 @@ ALTER TABLE resources_new RENAME TO resources;
 CREATE INDEX idx_resources_subject ON resources(subject_id, kind);
 CREATE INDEX idx_resources_origin  ON resources(origin_path);
 
--- The chunks referenced the dropped table, so the FTS index is rebuilt from
--- what survived rather than trusted.
+-- Put the chunks back. Ids are preserved because the FTS index keys off them.
+INSERT INTO resource_chunks (id, resource_id, ordinal, content)
+    SELECT b.id, b.resource_id, b.ordinal, b.content
+      FROM chunks_backup b
+      -- Only rows whose resource survived: a chunk pointing at nothing would
+      -- fail the foreign key on the next write and is not retrievable anyway.
+     WHERE EXISTS (SELECT 1 FROM resources r WHERE r.id = b.resource_id);
+
+DROP TABLE chunks_backup;
+
+-- Rebuilt from the restored chunks rather than trusted, since the cascade's
+-- delete triggers emptied the index on the way through.
 INSERT INTO resource_chunks_fts(resource_chunks_fts) VALUES ('rebuild');
 
 -- ---------------------------------------------------------------------------

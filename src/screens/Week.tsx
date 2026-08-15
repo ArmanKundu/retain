@@ -11,12 +11,24 @@
 // for tonight already being spoken for.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Plus, Trash2, X } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  Trash2,
+  Video,
+  X,
+} from "lucide-react";
 
 import { SectionHeader } from "../components/primitives";
 import { Button, Card, cx } from "../components/ui";
 import { api } from "../lib/api";
-import type { BlockKind, CalendarEvent, NewBlock, TimeBlock } from "../lib/types";
+import type {
+  BlockKind,
+  CalendarEvent,
+  NewBlock,
+  TimeBlock,
+} from "../lib/types";
 import { useApp } from "../store";
 
 /** The visible window. Outside this you're asleep or Retain has no business. */
@@ -46,7 +58,9 @@ function clock(minutes: number): string {
   const m = minutes % 60;
   const suffix = h < 12 ? "am" : "pm";
   const display = h % 12 === 0 ? 12 : h % 12;
-  return m === 0 ? `${display}${suffix}` : `${display}:${String(m).padStart(2, "0")}${suffix}`;
+  return m === 0
+    ? `${display}${suffix}`
+    : `${display}:${String(m).padStart(2, "0")}${suffix}`;
 }
 
 function isoOf(d: Date): string {
@@ -71,10 +85,15 @@ function mondayOf(d: Date): Date {
  * systematically understate your free time, which is what makes a planner feel
  * punishing rather than useful.
  */
-function freeMinutes(items: { startMin: number; endMin: number; available: boolean }[]): number {
+function freeMinutes(
+  items: { startMin: number; endMin: number; available: boolean }[],
+): number {
   const busy = items
     .filter((b) => !b.available)
-    .map((b) => [Math.max(b.startMin, DAY_START), Math.min(b.endMin, DAY_END)] as const)
+    .map(
+      (b) =>
+        [Math.max(b.startMin, DAY_START), Math.min(b.endMin, DAY_END)] as const,
+    )
     .filter(([s, e]) => e > s)
     .sort((a, b) => a[0] - b[0]);
 
@@ -105,7 +124,10 @@ export function Week() {
   const [anchor, setAnchor] = useState(() => mondayOf(new Date()));
   const [blocks, setBlocks] = useState<TimeBlock[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [editing, setEditing] = useState<{ block: TimeBlock | null; weekday: number } | null>(null);
+  const [editing, setEditing] = useState<{
+    block: TimeBlock | null;
+    weekday: number;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const days = useMemo(
@@ -145,15 +167,20 @@ export function Week() {
 
       <header className="animate-rise mb-6 flex flex-wrap items-end gap-4">
         <div>
-          <h1 className="text-[28px] font-semibold tracking-[-0.028em]">Your week</h1>
+          <h1 className="text-[28px] font-semibold tracking-[-0.028em]">
+            Your week
+          </h1>
           <p className="mt-1.5 text-[14px] leading-relaxed text-[var(--ink-dim)]">
-            Mark what your time is already spoken for, and Retain stops suggesting you study then.
+            Mark what your time is already spoken for, and Retain stops
+            suggesting you study then.
           </p>
         </div>
 
         <div className="ml-auto flex items-center gap-1.5">
           <button
-            onClick={() => setAnchor((a) => new Date(a.getTime() - 7 * 86400000))}
+            onClick={() =>
+              setAnchor((a) => new Date(a.getTime() - 7 * 86400000))
+            }
             aria-label="Previous week"
             className="pressable rounded-[var(--r-sm)] border border-[var(--line)] p-1.5 text-[var(--ink-dim)] hover:text-[var(--ink)]"
           >
@@ -166,7 +193,9 @@ export function Week() {
             This week
           </button>
           <button
-            onClick={() => setAnchor((a) => new Date(a.getTime() + 7 * 86400000))}
+            onClick={() =>
+              setAnchor((a) => new Date(a.getTime() + 7 * 86400000))
+            }
             aria-label="Next week"
             className="pressable rounded-[var(--r-sm)] border border-[var(--line)] p-1.5 text-[var(--ink-dim)] hover:text-[var(--ink)]"
           >
@@ -175,7 +204,9 @@ export function Week() {
         </div>
       </header>
 
-      {error && <p className="mb-3 text-[12.5px] text-[var(--danger)]">{error}</p>}
+      {error && (
+        <p className="mb-3 text-[12.5px] text-[var(--danger)]">{error}</p>
+      )}
 
       <Card className="animate-rise overflow-hidden p-0">
         <div className="flex">
@@ -187,7 +218,9 @@ export function Week() {
                 className="relative text-right text-[10.5px] text-[var(--ink-faint)]"
                 style={{ height: 60 * PX_PER_MIN }}
               >
-                <span className="absolute right-2 -top-[6px]">{clock(DAY_START + i * 60)}</span>
+                <span className="absolute right-2 -top-[6px]">
+                  {clock(DAY_START + i * 60)}
+                </span>
               </div>
             ))}
           </div>
@@ -201,14 +234,18 @@ export function Week() {
               const dayBlocks = blocks.filter(
                 (b) => b.weekday === weekday || b.onDate === iso,
               );
-              const dayEvents = events.filter((e) => e.localDate === iso && !e.allDay);
+              const dayEvents = events.filter(
+                (e) => e.localDate === iso && !e.allDay,
+              );
 
               // Compass classes count as committed time too.
               const free = freeMinutes([
                 ...dayBlocks,
                 ...dayEvents.map((e) => ({
                   startMin: minutesOf(e.startsAt),
-                  endMin: e.endsAt ? minutesOf(e.endsAt) : minutesOf(e.startsAt) + 50,
+                  endMin: e.endsAt
+                    ? minutesOf(e.endsAt)
+                    : minutesOf(e.startsAt) + 50,
                   available: false,
                 })),
               ]);
@@ -227,7 +264,9 @@ export function Week() {
                     <div
                       className={cx(
                         "text-[11.5px]",
-                        isToday ? "text-[var(--accent)]" : "text-[var(--ink-faint)]",
+                        isToday
+                          ? "text-[var(--accent)]"
+                          : "text-[var(--ink-faint)]",
                       )}
                     >
                       {WEEKDAYS[weekday]}
@@ -252,7 +291,9 @@ export function Week() {
                     onClick={(e) => {
                       const rect = e.currentTarget.getBoundingClientRect();
                       const minute =
-                        DAY_START + Math.round((e.clientY - rect.top) / PX_PER_MIN / 30) * 30;
+                        DAY_START +
+                        Math.round((e.clientY - rect.top) / PX_PER_MIN / 30) *
+                          30;
                       setEditing({
                         block: {
                           id: 0,
@@ -267,19 +308,23 @@ export function Week() {
                           subjectName: null,
                           colour: null,
                           note: null,
+                          link: null,
                         },
                         weekday,
                       });
                     }}
                   >
                     {/* Hour lines */}
-                    {Array.from({ length: (DAY_END - DAY_START) / 60 }, (_, i) => (
-                      <div
-                        key={i}
-                        className="absolute left-0 right-0 border-t border-[var(--line-soft)]"
-                        style={{ top: (i + 1) * 60 * PX_PER_MIN }}
-                      />
-                    ))}
+                    {Array.from(
+                      { length: (DAY_END - DAY_START) / 60 },
+                      (_, i) => (
+                        <div
+                          key={i}
+                          className="absolute left-0 right-0 border-t border-[var(--line-soft)]"
+                          style={{ top: (i + 1) * 60 * PX_PER_MIN }}
+                        />
+                      ),
+                    )}
 
                     {/* Compass classes, read-only — they come from the feed. */}
                     {dayEvents.map((e) => {
@@ -292,7 +337,10 @@ export function Week() {
                           className="absolute left-[3px] right-[3px] overflow-hidden rounded-[6px] border border-dashed px-1.5 py-1"
                           style={{
                             top: (start - DAY_START) * PX_PER_MIN,
-                            height: Math.max(16, (end - start) * PX_PER_MIN - 2),
+                            height: Math.max(
+                              16,
+                              (end - start) * PX_PER_MIN - 2,
+                            ),
                             borderColor: "var(--line)",
                             background: "var(--surface-hi)",
                           }}
@@ -318,7 +366,10 @@ export function Week() {
                           className="pressable absolute left-[3px] right-[3px] overflow-hidden rounded-[6px] px-1.5 py-1 text-left"
                           style={{
                             top: (b.startMin - DAY_START) * PX_PER_MIN,
-                            height: Math.max(18, (b.endMin - b.startMin) * PX_PER_MIN - 2),
+                            height: Math.max(
+                              18,
+                              (b.endMin - b.startMin) * PX_PER_MIN - 2,
+                            ),
                             background: `hsl(${tint} / ${b.available ? 0.1 : 0.17})`,
                             boxShadow: `inset 0 0 0 1px hsl(${tint} / 0.32)`,
                           }}
@@ -334,6 +385,21 @@ export function Week() {
                               {clock(b.startMin)}
                             </div>
                           )}
+                          {b.link && (
+                            <span
+                              onClick={(ev) => {
+                                ev.stopPropagation();
+                                void api.openBlockLink(b.id).catch(() => {});
+                              }}
+                              title="Join"
+                              className="absolute right-1 top-1 rounded-full bg-[var(--surface)]/80 p-[3px]"
+                            >
+                              <Video
+                                size={9}
+                                style={{ color: `hsl(${tint})` }}
+                              />
+                            </span>
+                          )}
                         </button>
                       );
                     })}
@@ -346,18 +412,20 @@ export function Week() {
       </Card>
 
       <p className="mt-3 px-1 text-[12px] leading-relaxed text-[var(--ink-faint)]">
-        Click anywhere in a column to add a block. Dashed blocks come from your Compass calendar
-        and can't be edited here. Free hours under each day account for overlaps.
+        Click anywhere in a column to add a block. Dashed blocks come from your
+        Compass calendar and can't be edited here. Free hours under each day
+        account for overlaps.
       </p>
 
       <section className="animate-rise mt-8">
         <SectionHeader title="What the assistant sees" />
         <Card className="p-5">
           <p className="text-[13px] leading-relaxed text-[var(--ink-dim)]">
-            Your committed time is included whenever you ask the assistant what to work on, so it
-            won't suggest a two-hour session on an evening you're at tuition. Blocks marked
-            <span className="text-[var(--ink)]"> "I can study here"</span> aren't counted as
-            committed.
+            Your committed time is included whenever you ask the assistant what
+            to work on, so it won't suggest a two-hour session on an evening
+            you're at tuition. Blocks marked
+            <span className="text-[var(--ink)]"> "I can study here"</span>{" "}
+            aren't counted as committed.
           </p>
         </Card>
       </section>
@@ -401,7 +469,10 @@ function BlockEditor({
   const [startMin, setStartMin] = useState(initial?.startMin ?? 16 * 60);
   const [endMin, setEndMin] = useState(initial?.endMin ?? 17 * 60);
   const [available, setAvailable] = useState(initial?.available ?? false);
-  const [subjectId, setSubjectId] = useState<number | null>(initial?.subjectId ?? null);
+  const [subjectId, setSubjectId] = useState<number | null>(
+    initial?.subjectId ?? null,
+  );
+  const [link, setLink] = useState(initial?.link ?? "");
   const [repeats, setRepeats] = useState(initial?.onDate == null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -419,6 +490,7 @@ function BlockEditor({
       available,
       subjectId,
       note: null,
+      link: link.trim() || null,
     };
 
     try {
@@ -433,8 +505,14 @@ function BlockEditor({
   };
 
   return (
-    <div className="scrim fixed inset-0 z-50 flex items-center justify-center px-8" onClick={onClose}>
-      <div className="sheet animate-pop w-full max-w-[440px] p-7" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="scrim fixed inset-0 z-50 flex items-center justify-center px-8"
+      onClick={onClose}
+    >
+      <div
+        className="sheet animate-pop w-full max-w-[440px] p-7"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-start gap-3">
           <h2 className="flex-1 text-[19px] font-semibold tracking-[-0.02em]">
             {existing ? "Edit block" : "Block out some time"}
@@ -496,8 +574,8 @@ function BlockEditor({
           <span className="text-[13px] leading-relaxed">
             I can study here
             <span className="block text-[12px] text-[var(--ink-faint)]">
-              A free period you actually work in, say. Unticked means Retain treats this time as
-              gone.
+              A free period you actually work in, say. Unticked means Retain
+              treats this time as gone.
             </span>
           </span>
         </label>
@@ -511,10 +589,19 @@ function BlockEditor({
           <span className="text-[13px]">Every week</span>
         </label>
 
+        <input
+          value={link}
+          onChange={(e) => setLink(e.target.value)}
+          placeholder="Meeting link — Zoom, Teams, Meet…"
+          className="mt-4 h-9 w-full rounded-[var(--r-sm)] border border-[var(--line)] bg-[var(--surface-hi)] px-3 text-[12.5px] text-[var(--ink)] placeholder:text-[var(--ink-faint)] outline-none focus:border-[var(--accent)]"
+        />
+
         {subjects.length > 0 && (
           <select
             value={subjectId ?? ""}
-            onChange={(e) => setSubjectId(e.target.value ? Number(e.target.value) : null)}
+            onChange={(e) =>
+              setSubjectId(e.target.value ? Number(e.target.value) : null)
+            }
             className="mt-4 h-9 w-full rounded-[var(--r-sm)] border border-[var(--line)] bg-[var(--surface-hi)] px-2.5 text-[12.5px] text-[var(--ink)]"
           >
             <option value="">No subject</option>
@@ -526,7 +613,9 @@ function BlockEditor({
           </select>
         )}
 
-        {error && <p className="mt-3 text-[12.5px] text-[var(--danger)]">{error}</p>}
+        {error && (
+          <p className="mt-3 text-[12.5px] text-[var(--danger)]">{error}</p>
+        )}
 
         <div className="mt-6 flex items-center gap-2">
           {existing && (

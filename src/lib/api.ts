@@ -86,6 +86,9 @@ import type {
   TopicMastery,
   DeckStats,
   RatingPreview,
+  Note,
+  NoteSummary,
+  NoteBlockKind,
 } from "./types";
 
 export const api = {
@@ -516,6 +519,41 @@ export const api = {
   /** What each rating would do to this card's interval. */
   ratingPreviews: (cardId: number) =>
     invoke<RatingPreview>("rating_previews", { cardId }),
+
+  // -- notes ----------------------------------------------------------------
+  listNotes: (subjectId: number | null) =>
+    invoke<NoteSummary[]>("list_notes", { subjectId }),
+  getNote: (id: number) => invoke<Note>("get_note", { id }),
+  createNote: (
+    subjectId: number | null,
+    title: string,
+    onDate: string | null,
+  ) => invoke<number>("create_note", { subjectId, title, onDate }),
+  setNoteTitle: (id: number, title: string) =>
+    invoke<void>("set_note_title", { id, title }),
+  setNoteSubject: (id: number, subjectId: number | null) =>
+    invoke<void>("set_note_subject", { id, subjectId }),
+  updateNoteBlock: (
+    blockId: number,
+    kind: NoteBlockKind,
+    text: string,
+    checked: boolean,
+    image: string | null,
+  ) =>
+    invoke<void>("update_note_block", { blockId, kind, text, checked, image }),
+  insertNoteBlock: (
+    noteId: number,
+    after: number | null,
+    kind: NoteBlockKind,
+    text: string,
+  ) => invoke<number>("insert_note_block", { noteId, after, kind, text }),
+  deleteNoteBlock: (blockId: number) =>
+    invoke<void>("delete_note_block", { blockId }),
+  /** -1 moves up, +1 down. A no-op at either end. */
+  moveNoteBlock: (blockId: number, delta: number) =>
+    invoke<void>("move_note_block", { blockId, delta }),
+  deleteNote: (id: number) => invoke<void>("delete_note", { id }),
+  noteMarkdown: (id: number) => invoke<string>("note_markdown", { id }),
   conversationMarkdown: (conversationId: number) =>
     invoke<string>("conversation_markdown", { conversationId }),
 

@@ -11,6 +11,7 @@ mod ingest;
 mod inbox;
 mod mastery;
 mod models;
+mod notes;
 mod notifications;
 mod plan;
 mod provider;
@@ -259,6 +260,17 @@ pub fn run() {
             commands::deck_stats,
             commands::practice_queue,
             commands::rating_previews,
+            commands::list_notes,
+            commands::get_note,
+            commands::create_note,
+            commands::set_note_title,
+            commands::set_note_subject,
+            commands::update_note_block,
+            commands::insert_note_block,
+            commands::delete_note_block,
+            commands::move_note_block,
+            commands::delete_note,
+            commands::note_markdown,
             commands::preview_intervals,
             // Resources and the saved-output library.
             commands::list_resources,

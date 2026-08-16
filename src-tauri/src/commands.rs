@@ -23,7 +23,7 @@ use crate::models::*;
 use crate::timer::{self, ActiveTimer, SharedTimer};
 use crate::tray::TrayHandles;
 use crate::scheduler;
-use crate::{ai, assessments, assistant, biology, blocks, capture, ics, ingest, library, resources, update, workspace, cards, errors, export, inbox, mastery, notifications, plan, provider, screen, secrets, settings, streak, subjects, tools};
+use crate::{ai, assessments, assistant, biology, blocks, capture, ics, ingest, library, resources, update, workspace, cards, errors, export, inbox, mastery, notes, notifications, plan, provider, screen, secrets, settings, streak, subjects, tools};
 
 /// Shared state, created in `lib.rs` and handed to every command.
 pub struct AppState {
@@ -2666,4 +2666,107 @@ pub struct RatingPreview {
     pub hard: Option<i64>,
     pub good: Option<i64>,
     pub easy: Option<i64>,
+}
+
+// ---------------------------------------------------------------------------
+// Notes
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn list_notes(
+    state: State<'_, AppState>,
+    subject_id: Option<i64>,
+) -> CmdResult<Vec<notes::NoteSummary>> {
+    Ok(notes::list(&db(&state), subject_id, 200)?)
+}
+
+#[tauri::command]
+pub fn get_note(state: State<'_, AppState>, id: i64) -> CmdResult<notes::Note> {
+    Ok(notes::get(&db(&state), id)?)
+}
+
+#[tauri::command]
+pub fn create_note(
+    state: State<'_, AppState>,
+    subject_id: Option<i64>,
+    title: String,
+    on_date: Option<String>,
+) -> CmdResult<i64> {
+    Ok(notes::create(
+        &db(&state),
+        subject_id,
+        &title,
+        on_date.as_deref(),
+        chrono::Utc::now(),
+    )?)
+}
+
+#[tauri::command]
+pub fn set_note_title(state: State<'_, AppState>, id: i64, title: String) -> CmdResult<()> {
+    Ok(notes::set_title(&db(&state), id, &title, chrono::Utc::now())?)
+}
+
+#[tauri::command]
+pub fn set_note_subject(
+    state: State<'_, AppState>,
+    id: i64,
+    subject_id: Option<i64>,
+) -> CmdResult<()> {
+    Ok(notes::set_subject(&db(&state), id, subject_id, chrono::Utc::now())?)
+}
+
+#[tauri::command]
+pub fn update_note_block(
+    state: State<'_, AppState>,
+    block_id: i64,
+    kind: String,
+    text: String,
+    checked: bool,
+    image: Option<String>,
+) -> CmdResult<()> {
+    Ok(notes::update_block(
+        &db(&state),
+        block_id,
+        &kind,
+        &text,
+        checked,
+        image.as_deref(),
+        chrono::Utc::now(),
+    )?)
+}
+
+#[tauri::command]
+pub fn insert_note_block(
+    state: State<'_, AppState>,
+    note_id: i64,
+    after: Option<i64>,
+    kind: String,
+    text: String,
+) -> CmdResult<i64> {
+    let mut conn = state.db.lock().expect("database mutex poisoned");
+    Ok(notes::insert_block(&mut conn, note_id, after, &kind, &text, chrono::Utc::now())?)
+}
+
+#[tauri::command]
+pub fn delete_note_block(state: State<'_, AppState>, block_id: i64) -> CmdResult<()> {
+    let mut conn = state.db.lock().expect("database mutex poisoned");
+    Ok(notes::delete_block(&mut conn, block_id, chrono::Utc::now())?)
+}
+
+#[tauri::command]
+pub fn move_note_block(state: State<'_, AppState>, block_id: i64, delta: i64) -> CmdResult<()> {
+    let mut conn = state.db.lock().expect("database mutex poisoned");
+    Ok(notes::move_block(&mut conn, block_id, delta, chrono::Utc::now())?)
+}
+
+#[tauri::command]
+pub fn delete_note(state: State<'_, AppState>, id: i64) -> CmdResult<()> {
+    Ok(notes::delete(&db(&state), id)?)
+}
+
+/// The note as Markdown — for printing, or saving next to your other material.
+#[tauri::command]
+pub fn note_markdown(state: State<'_, AppState>, id: i64) -> CmdResult<String> {
+    let conn = db(&state);
+    Ok(notes::to_markdown(&notes::get(&conn, id)?))
 }

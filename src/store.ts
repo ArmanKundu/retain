@@ -24,9 +24,20 @@ import type {
 // `import` is deliberately not in the sidebar — it's reached from Review, which
 // is where you notice you need more cards.
 export type Route =
-  | "today" | "timer" | "week" | "inbox" | "review" | "errors"
-  | "assessments" | "biology" | "library" | "assistant"
-  | "progress" | "settings" | "import";
+  | "today"
+  | "timer"
+  | "week"
+  | "inbox"
+  | "review"
+  | "errors"
+  | "notes"
+  | "assessments"
+  | "biology"
+  | "library"
+  | "assistant"
+  | "progress"
+  | "settings"
+  | "import";
 
 interface AppState {
   ready: boolean;

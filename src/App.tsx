@@ -1,6 +1,20 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { BarChart3, BookMarked, CalendarClock, CalendarDays, ClipboardList, Dna, Home, Inbox as InboxIcon, Layers, MessageSquare, Settings as SettingsIcon, Timer as TimerIcon } from "lucide-react";
+import {
+  BarChart3,
+  BookMarked,
+  CalendarClock,
+  CalendarDays,
+  ClipboardList,
+  Dna,
+  Home,
+  Inbox as InboxIcon,
+  Layers,
+  MessageSquare,
+  NotebookPen,
+  Settings as SettingsIcon,
+  Timer as TimerIcon,
+} from "lucide-react";
 
 import { Onboarding } from "./screens/Onboarding";
 import { Today } from "./screens/Today";
@@ -14,6 +28,7 @@ import { Biology } from "./screens/Biology";
 import { Assistant } from "./screens/Assistant";
 import { Week } from "./screens/Week";
 import { Library } from "./screens/Library";
+import { Notes } from "./screens/Notes";
 import { Progress } from "./screens/Progress";
 import { Settings } from "./screens/Settings";
 import { FocusDock } from "./components/FocusDock";
@@ -36,35 +51,36 @@ const NAV_GROUPS: { heading: string; items: NavItem[] }[] = [
   {
     heading: "Study",
     items: [
-  { route: "today", label: "Today", Icon: Home },
-  { route: "timer", label: "Timer", Icon: TimerIcon },
-  { route: "week", label: "Week", Icon: CalendarDays },
-  { route: "inbox", label: "Inbox", Icon: InboxIcon },
-  { route: "review", label: "Review", Icon: Layers },
+      { route: "today", label: "Today", Icon: Home },
+      { route: "timer", label: "Timer", Icon: TimerIcon },
+      { route: "week", label: "Week", Icon: CalendarDays },
+      { route: "inbox", label: "Inbox", Icon: InboxIcon },
+      { route: "review", label: "Review", Icon: Layers },
     ],
   },
   {
     heading: "Learn",
     items: [
-  { route: "errors", label: "Error log", Icon: ClipboardList },
-  { route: "assessments", label: "Assessments", Icon: CalendarClock },
-  // Only shown when there is actually a Biology 3/4 subject — a nav item that
-  // leads to an explanation of why it's empty is worse than no nav item.
-  {
-    route: "biology",
-    label: "Biology 3/4",
-    Icon: Dna,
-    onlyIf: (subjects) => subjects.some(isBiologyThreeFour),
-  },
-  { route: "assistant", label: "Assistant", Icon: MessageSquare },
-  { route: "library", label: "Library", Icon: BookMarked },
+      { route: "errors", label: "Error log", Icon: ClipboardList },
+      { route: "assessments", label: "Assessments", Icon: CalendarClock },
+      // Only shown when there is actually a Biology 3/4 subject — a nav item that
+      // leads to an explanation of why it's empty is worse than no nav item.
+      {
+        route: "biology",
+        label: "Biology 3/4",
+        Icon: Dna,
+        onlyIf: (subjects) => subjects.some(isBiologyThreeFour),
+      },
+      { route: "assistant", label: "Assistant", Icon: MessageSquare },
+      { route: "notes", label: "Notes", Icon: NotebookPen },
+      { route: "library", label: "Library", Icon: BookMarked },
     ],
   },
   {
     heading: "You",
     items: [
-  { route: "progress", label: "Progress", Icon: BarChart3 },
-  { route: "settings", label: "Settings", Icon: SettingsIcon },
+      { route: "progress", label: "Progress", Icon: BarChart3 },
+      { route: "settings", label: "Settings", Icon: SettingsIcon },
     ],
   },
 ];
@@ -72,9 +88,20 @@ const NAV_GROUPS: { heading: string; items: NavItem[] }[] = [
 type AppSubjects = ReturnType<typeof useApp.getState>["subjects"];
 
 export default function App() {
-  const { ready, boot, route, setRoute, timer, setTimer, init, refreshProgress, subjects } =
-    useApp();
-  const [justFinished, setJustFinished] = useState<FinishedSession | null>(null);
+  const {
+    ready,
+    boot,
+    route,
+    setRoute,
+    timer,
+    setTimer,
+    init,
+    refreshProgress,
+    subjects,
+  } = useApp();
+  const [justFinished, setJustFinished] = useState<FinishedSession | null>(
+    null,
+  );
 
   useEffect(() => {
     void init();
@@ -83,7 +110,9 @@ export default function App() {
   // The backend owns the timer and broadcasts it once a second. The UI is a
   // subscriber, which is why closing the window doesn't stop anything.
   useEffect(() => {
-    const tick = listen<TimerSnapshot | null>("timer:tick", (e) => setTimer(e.payload));
+    const tick = listen<TimerSnapshot | null>("timer:tick", (e) =>
+      setTimer(e.payload),
+    );
     // Fired when a session is stopped from the menu bar, so the note prompt
     // still appears even though the stop didn't come from this window.
     const finished = listen<FinishedSession>("timer:finished", (e) => {
@@ -119,7 +148,9 @@ export default function App() {
 
         <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-2.5 py-2">
           {NAV_GROUPS.map((group) => {
-            const items = group.items.filter((n) => !n.onlyIf || n.onlyIf(subjects));
+            const items = group.items.filter(
+              (n) => !n.onlyIf || n.onlyIf(subjects),
+            );
             if (items.length === 0) return null;
 
             return (
@@ -133,7 +164,8 @@ export default function App() {
                       key={r}
                       onClick={() => {
                         setRoute(r);
-                        if (r === "today" || r === "progress") void refreshProgress();
+                        if (r === "today" || r === "progress")
+                          void refreshProgress();
                       }}
                       aria-current={route === r ? "page" : undefined}
                       className={cx(
@@ -148,7 +180,8 @@ export default function App() {
                           ? {
                               // A tinted capsule, not a saturated block: the
                               // active route should read as a selected object.
-                              background: "color-mix(in srgb, var(--accent) 11%, transparent)",
+                              background:
+                                "color-mix(in srgb, var(--accent) 11%, transparent)",
                             }
                           : undefined
                       }
@@ -202,19 +235,22 @@ export default function App() {
 
       <main className="relative flex flex-1 flex-col overflow-y-auto">
         <div className="flex-1">
-        {route === "today" && <Today />}
-        {route === "timer" && <TimerScreen onFinished={setJustFinished} />}
-        {route === "week" && <Week />}
-        {route === "review" && <Review onImport={() => setRoute("import")} />}
-        {route === "import" && <ImportScreen onDone={() => setRoute("review")} />}
-        {route === "inbox" && <Inbox />}
-        {route === "errors" && <ErrorLog />}
-        {route === "assessments" && <Assessments />}
-        {route === "biology" && <Biology />}
-        {route === "library" && <Library />}
-        {route === "assistant" && <Assistant />}
-        {route === "progress" && <Progress />}
-        {route === "settings" && <Settings />}
+          {route === "today" && <Today />}
+          {route === "timer" && <TimerScreen onFinished={setJustFinished} />}
+          {route === "week" && <Week />}
+          {route === "review" && <Review onImport={() => setRoute("import")} />}
+          {route === "import" && (
+            <ImportScreen onDone={() => setRoute("review")} />
+          )}
+          {route === "inbox" && <Inbox />}
+          {route === "errors" && <ErrorLog />}
+          {route === "assessments" && <Assessments />}
+          {route === "biology" && <Biology />}
+          {route === "notes" && <Notes />}
+          {route === "library" && <Library />}
+          {route === "assistant" && <Assistant />}
+          {route === "progress" && <Progress />}
+          {route === "settings" && <Settings />}
         </div>
 
         {/* A running session follows you across screens rather than being

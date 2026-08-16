@@ -962,3 +962,51 @@ export interface RatingPreview {
   good: number | null;
   easy: number | null;
 }
+
+/** One block of a note. The unit of both editing and ordering. */
+export interface NoteBlock {
+  id: number;
+  position: number;
+  kind: NoteBlockKind;
+  text: string;
+  checked: boolean;
+  /** A `data:image/...;base64,` URL, for `image` blocks. */
+  image: string | null;
+}
+
+export type NoteBlockKind =
+  | "paragraph"
+  | "h1"
+  | "h2"
+  | "h3"
+  | "bullet"
+  | "numbered"
+  | "todo"
+  | "quote"
+  | "code"
+  | "divider"
+  | "image";
+
+export interface NoteSummary {
+  id: number;
+  subjectId: number | null;
+  subjectName: string | null;
+  colour: string | null;
+  title: string;
+  onDate: string | null;
+  /** First block with anything in it — most notes never get a title typed. */
+  preview: string;
+  blockCount: number;
+  updatedAt: string;
+}
+
+export interface Note {
+  id: number;
+  subjectId: number | null;
+  subjectName: string | null;
+  topicId: number | null;
+  title: string;
+  onDate: string | null;
+  blocks: NoteBlock[];
+  updatedAt: string;
+}

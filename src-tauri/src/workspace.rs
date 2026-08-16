@@ -67,11 +67,15 @@ pub fn ensure(conn: &Connection, documents: &Path) -> Result<Vec<SubjectFolder>>
             "Retain made these folders, one per subject.\n\n\
              Each subject has folders for the different kinds of material:\n\n\
                Study design           what VCAA says is examinable\n\
-               Past papers            exams and SACs\n\
+               Past papers            VCAA exams\n\
                Solutions and reports  marking schemes, examiner's reports\n\
-               School notes           from your teacher\n\
-               My notes               your own\n\
                Textbook               chapters and extracts\n\n\
+             Those four cover the whole unit sequence, so they sit directly under the\n\
+             subject. The things you keep per unit have a folder each:\n\n\
+               Unit 3/School notes    from your teacher\n\
+               Unit 3/My notes        your own\n\
+               Unit 3/Trial tests     your school's practice exams\n\
+               Unit 4/...             the same again\n\n\
              Drop files into the matching folder, then open Retain and press Sync on the\n\
              Library screen. The folder tells Retain both the subject and what the document\n\
              is, so there is nothing to fill in.\n\n\
@@ -96,15 +100,7 @@ pub fn ensure(conn: &Connection, documents: &Path) -> Result<Vec<SubjectFolder>>
         std::fs::create_dir_all(&path)
             .map_err(|e| anyhow!("Couldn't create {}: {e}", path.display()))?;
 
-        // One subfolder per kind of material. Dropping a file into the right
-        // one is the whole filing system — the folder carries both the subject
-        // and what the document is.
-        for kind in crate::resources::ResourceKind::all() {
-            if kind == crate::resources::ResourceKind::Other {
-                continue; // "Other" is a fallback, not somewhere to file things
-            }
-            let _ = std::fs::create_dir_all(path.join(kind.folder()));
-        }
+        build_tree(conn, id, &path)?;
 
         let display = path.to_string_lossy().to_string();
         conn.execute(
@@ -129,6 +125,72 @@ pub fn ensure(conn: &Connection, documents: &Path) -> Result<Vec<SubjectFolder>>
     }
 
     Ok(out)
+}
+
+/// The folder tree for one subject.
+///
+/// Shaped by which distinctions are real. VCAA material — the study design, the
+/// exams, the reports — and the textbook cover the whole unit sequence, so they
+/// sit directly under the subject. The things you genuinely keep per unit get a
+/// `Unit 3` / `Unit 4` folder each:
+///
+///     Chemistry/
+///       Study design/            what VCAA says is examinable, both units
+///       Past papers/             VCAA exams, both units
+///       Solutions and reports/   marking schemes, examiner's reports
+///       Textbook/
+///       Unit 3/
+///         School notes/  My notes/  Trial tests/
+///       Unit 4/
+///         School notes/  My notes/  Trial tests/
+///
+/// The alternative — a unit folder above everything — would ask you which unit
+/// a study design belongs to, and there is no answer. A tree that asks
+/// unanswerable questions is one you stop filing things in.
+fn build_tree(conn: &Connection, subject_id: i64, path: &Path) -> Result<()> {
+    use crate::resources::ResourceKind;
+
+    for kind in ResourceKind::all() {
+        // "Other" is a fallback, not somewhere to file things.
+        if kind == ResourceKind::Other || kind.per_unit() {
+            continue;
+        }
+        let _ = std::fs::create_dir_all(path.join(kind.folder()));
+    }
+
+    for unit in units_for(conn, subject_id)? {
+        let unit_dir = path.join(format!("Unit {unit}"));
+        for kind in ResourceKind::all().into_iter().filter(|k| k.per_unit()) {
+            let _ = std::fs::create_dir_all(unit_dir.join(kind.folder()));
+        }
+    }
+
+    Ok(())
+}
+
+/// The two units a subject is currently running, from its unit level.
+fn units_for(conn: &Connection, subject_id: i64) -> Result<[u8; 2]> {
+    let level: String = conn
+        .query_row("SELECT unit_level FROM subjects WHERE id = ?1", [subject_id], |r| r.get(0))
+        .unwrap_or_else(|_| "3_4".to_string());
+
+    Ok(match level.as_str() {
+        "1_2" => [1, 2],
+        _ => [3, 4],
+    })
+}
+
+/// Which unit a file's path puts it in, if any.
+///
+/// `…/Chemistry/Unit 3/My notes/kinetics.pdf` is Unit 3. Anything not under a
+/// unit folder spans the sequence, and that is a real answer rather than a
+/// missing one — see `ResourceKind::per_unit`.
+pub fn unit_from_path(path: &Path) -> Option<i64> {
+    path.components().rev().find_map(|c| {
+        let name = c.as_os_str().to_string_lossy();
+        let rest = name.strip_prefix("Unit ").or_else(|| name.strip_prefix("unit "))?;
+        rest.trim().parse::<i64>().ok().filter(|u| (1..=4).contains(u))
+    })
 }
 
 /// Whether a file at this path has already been indexed.
@@ -187,12 +249,11 @@ pub fn guess_kind(name: &str) -> crate::resources::ResourceKind {
     {
         // Checked before "exam", or "2023 exam solutions.pdf" files as a paper.
         ResourceKind::ExamSolution
-    } else if n.contains("exam")
-        || n.contains("paper")
-        || n.contains("vcaa")
-        || n.contains("sac")
-        || n.contains("trial")
-    {
+    } else if n.contains("trial") || n.contains("practice exam") {
+        // Checked before "exam": a school trial is not a VCAA paper and must
+        // not be weighted as evidence of what VCAA actually asks.
+        ResourceKind::TrialTest
+    } else if n.contains("exam") || n.contains("paper") || n.contains("vcaa") || n.contains("sac") {
         ResourceKind::PastPaper
     } else if n.contains("textbook") || n.contains("chapter") {
         ResourceKind::Textbook
@@ -316,18 +377,89 @@ mod tests {
         d
     }
 
+    /// VCAA material and the textbook cover the whole sequence, so they sit
+    /// directly under the subject. Asking which unit a study design belongs to
+    /// has no answer, and a tree that asks unanswerable questions is one you
+    /// stop filing things in.
     #[test]
-    fn every_subject_gets_a_folder_per_kind_of_material() {
+    fn material_that_spans_the_units_sits_above_them() {
         let conn = db();
         let docs = tmp("kinds");
         ensure(&conn, &docs).unwrap();
 
         let bio = docs.join("Retain/Biology");
-        for name in ["Study design", "Past papers", "Solutions and reports", "School notes", "My notes"] {
+        for name in ["Study design", "Past papers", "Solutions and reports", "Textbook"] {
             assert!(bio.join(name).is_dir(), "missing {name}");
         }
+
+        // These are per-unit, so they must NOT exist at the subject level —
+        // two places to put your Unit 3 notes is worse than one.
+        for name in ["School notes", "My notes", "Trial tests"] {
+            assert!(!bio.join(name).exists(), "{name} should be inside a unit");
+        }
+
         // "Other" is a fallback, not somewhere to file things.
         assert!(!bio.join("Other").exists());
+    }
+
+    #[test]
+    fn the_things_you_keep_per_unit_get_a_folder_each() {
+        let conn = db();
+        let docs = tmp("units");
+        ensure(&conn, &docs).unwrap();
+
+        let bio = docs.join("Retain/Biology");
+        for unit in ["Unit 3", "Unit 4"] {
+            for name in ["School notes", "My notes", "Trial tests"] {
+                assert!(bio.join(unit).join(name).is_dir(), "missing {unit}/{name}");
+            }
+        }
+    }
+
+    /// A 1/2 subject gets Units 1 and 2, not 3 and 4.
+    #[test]
+    fn the_unit_folders_follow_the_subjects_own_level() {
+        let conn = db();
+        conn.execute(
+            "INSERT INTO subjects (id,name,colour,unit_level,subject_type,sort_order,created_at)
+             VALUES (90,'Methods','#D08B3C','1_2','maths',9,'2026-08-01T00:00:00Z')",
+            [],
+        )
+        .unwrap();
+
+        let docs = tmp("level");
+        ensure(&conn, &docs).unwrap();
+
+        let methods = docs.join("Retain/Methods");
+        assert!(methods.join("Unit 1/My notes").is_dir());
+        assert!(methods.join("Unit 2/My notes").is_dir());
+        assert!(!methods.join("Unit 3").exists());
+    }
+
+    #[test]
+    fn a_files_unit_comes_from_the_folder_it_was_dropped_in() {
+        let base = Path::new("/Users/x/Documents/Retain/Chemistry");
+
+        assert_eq!(unit_from_path(&base.join("Unit 3/My notes/redox.pdf")), Some(3));
+        assert_eq!(unit_from_path(&base.join("Unit 4/Trial tests/2025.pdf")), Some(4));
+
+        // Material above the unit folders spans the sequence. `None` is the
+        // right answer, not a missing one.
+        assert_eq!(unit_from_path(&base.join("Study design/2022.pdf")), None);
+        assert_eq!(unit_from_path(&base.join("Past papers/2023 exam.pdf")), None);
+
+        // Not a unit folder, however much it looks like one.
+        assert_eq!(unit_from_path(&base.join("Unit conversions/notes.pdf")), None);
+        assert_eq!(unit_from_path(&base.join("Unit 9/notes.pdf")), None);
+    }
+
+    /// A school trial exam is a prediction of a VCAA paper, not evidence of what
+    /// VCAA asks, so it must not be filed as one.
+    #[test]
+    fn a_school_trial_is_not_filed_as_a_vcaa_paper() {
+        assert_eq!(guess_kind("2025 trial exam.pdf"), crate::resources::ResourceKind::TrialTest);
+        assert_eq!(guess_kind("practice exam 1.pdf"), crate::resources::ResourceKind::TrialTest);
+        assert_eq!(guess_kind("2023 vcaa exam.pdf"), crate::resources::ResourceKind::PastPaper);
     }
 
     #[test]

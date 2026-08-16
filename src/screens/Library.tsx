@@ -54,14 +54,47 @@ const KIND_LABEL: Record<LibraryKind, string> = {
  * notes, because the first says what's examinable and the second records what
  * you understood at the time — which is the thing you're trying to correct.
  */
+/**
+ * Ordered by authority, which is the thing the taxonomy is actually for: the
+ * study design says what is examinable, a report says what earned marks, a
+ * trial exam is a school's prediction, your notes record what you understood.
+ * The assistant weights them in this order.
+ */
 const RESOURCE_KINDS: { value: ResourceKind; label: string; hint: string }[] = [
-  { value: "study_design", label: "Study design", hint: "What VCAA says is examinable" },
-  { value: "past_paper", label: "Past papers", hint: "Exams and SACs" },
-  { value: "exam_solution", label: "Solutions", hint: "Marking schemes, examiner's reports" },
+  {
+    value: "study_design",
+    label: "Study design",
+    hint: "What VCAA says is examinable",
+  },
+  { value: "past_paper", label: "Past papers", hint: "VCAA exams" },
+  {
+    value: "exam_solution",
+    label: "Solutions",
+    hint: "Marking schemes, examiner's reports",
+  },
+  {
+    value: "trial_test",
+    label: "Trial tests",
+    hint: "Your school's practice exams — not VCAA",
+  },
+  { value: "textbook", label: "Textbook", hint: "Chapters and extracts" },
   { value: "school_notes", label: "School notes", hint: "From your teacher" },
   { value: "personal_notes", label: "My notes", hint: "Your own" },
-  { value: "textbook", label: "Textbook", hint: "Chapters and extracts" },
   { value: "other", label: "Other", hint: "Anything else" },
+];
+
+/**
+ * Which kinds are filed per unit.
+ *
+ * Mirrors `ResourceKind::per_unit` in Rust. A study design covers the whole
+ * sequence and a VCAA exam examines both units in one paper, so asking which
+ * unit they belong to has no answer — those stay unit-less, and that is a real
+ * answer rather than missing data.
+ */
+const PER_UNIT: ResourceKind[] = [
+  "school_notes",
+  "personal_notes",
+  "trial_test",
 ];
 
 export function Library() {
@@ -72,9 +105,12 @@ export function Library() {
       <div className="titlebar-drag h-11" />
 
       <header className="animate-rise mb-6">
-        <h1 className="text-[28px] font-semibold tracking-[-0.028em]">Library</h1>
+        <h1 className="text-[28px] font-semibold tracking-[-0.028em]">
+          Library
+        </h1>
         <p className="mt-1.5 text-[14px] leading-relaxed text-[var(--ink-dim)]">
-          Everything Retain has written for you, and the material it writes from.
+          Everything Retain has written for you, and the material it writes
+          from.
         </p>
       </header>
 
@@ -132,7 +168,10 @@ function Saved() {
       {/* Ask for notes. The one place in the app that generates a document
           rather than a card or a suggestion. */}
       <section className="animate-rise mb-8">
-        <SectionHeader title="Write me notes" hint="grounded in your own material" />
+        <SectionHeader
+          title="Write me notes"
+          hint="grounded in your own material"
+        />
         <Card className="p-5">
           <AiGate
             status={status}
@@ -148,7 +187,9 @@ function Saved() {
               />
               <select
                 value={subjectId ?? ""}
-                onChange={(e) => setSubjectId(e.target.value ? Number(e.target.value) : null)}
+                onChange={(e) =>
+                  setSubjectId(e.target.value ? Number(e.target.value) : null)
+                }
                 className="h-9 rounded-[var(--r-sm)] border border-[var(--line)] bg-[var(--surface-hi)] px-2.5 text-[12.5px] text-[var(--ink)]"
               >
                 <option value="">Any subject</option>
@@ -175,7 +216,9 @@ function Saved() {
               />
             </div>
 
-            {note && <p className="mt-3 text-[12.5px] text-[var(--ink-dim)]">{note}</p>}
+            {note && (
+              <p className="mt-3 text-[12.5px] text-[var(--ink-dim)]">{note}</p>
+            )}
           </AiGate>
         </Card>
       </section>
@@ -225,10 +268,14 @@ function Saved() {
                 onClick={() => setOpen(item)}
                 className="group flex w-full items-center gap-3 rounded-[var(--r-md)] px-3 py-3 text-left transition-colors duration-[var(--t-fast)] hover:bg-[var(--surface-hi)]/60"
               >
-                {item.pinned && <Pin size={12} className="shrink-0 text-[var(--warn)]" />}
+                {item.pinned && (
+                  <Pin size={12} className="shrink-0 text-[var(--warn)]" />
+                )}
 
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[13.5px] text-[var(--ink)]">{item.title}</div>
+                  <div className="truncate text-[13.5px] text-[var(--ink)]">
+                    {item.title}
+                  </div>
                   <div className="mt-0.5 flex items-center gap-2 text-[11.5px] text-[var(--ink-faint)]">
                     <span>{KIND_LABEL[item.kind]}</span>
                     <span>·</span>
@@ -243,7 +290,11 @@ function Saved() {
                 </div>
 
                 {item.subjectName && item.colour && (
-                  <SubjectPill name={item.subjectName} colour={item.colour} size="sm" />
+                  <SubjectPill
+                    name={item.subjectName}
+                    colour={item.colour}
+                    size="sm"
+                  />
                 )}
               </button>
             ))}
@@ -315,7 +366,9 @@ function ItemViewer({
             title={item.pinned ? "Unpin" : "Pin to the top"}
             className={cx(
               "pressable rounded-[var(--r-sm)] p-1.5",
-              item.pinned ? "text-[var(--warn)]" : "text-[var(--ink-faint)] hover:text-[var(--ink)]",
+              item.pinned
+                ? "text-[var(--warn)]"
+                : "text-[var(--ink-faint)] hover:text-[var(--ink)]",
             )}
           >
             <Pin size={14} />
@@ -411,15 +464,24 @@ function Materials() {
       <section className="animate-rise mb-8">
         <SectionHeader
           title="Your material"
-          hint={list.length > 0 ? `${totalWords.toLocaleString()} words indexed` : undefined}
+          hint={
+            list.length > 0
+              ? `${totalWords.toLocaleString()} words indexed`
+              : undefined
+          }
         />
         <Uploader subjects={subjects} onAdded={load} onError={setError} />
-        {error && <p className="mt-2 text-[12.5px] text-[var(--danger)]">{error}</p>}
+        {error && (
+          <p className="mt-2 text-[12.5px] text-[var(--danger)]">{error}</p>
+        )}
       </section>
 
       {list.length > 0 && (
         <section className="animate-rise mb-8">
-          <SectionHeader title="Check coverage" hint="no model call, costs nothing" />
+          <SectionHeader
+            title="Check coverage"
+            hint="no model call, costs nothing"
+          />
           <Card className="p-4">
             <div className="flex flex-wrap items-center gap-2">
               <input
@@ -431,7 +493,9 @@ function Materials() {
               <Button
                 size="sm"
                 disabled={probe.trim().length < 3}
-                onClick={async () => setHits((await api.searchResources(probe)).length)}
+                onClick={async () =>
+                  setHits((await api.searchResources(probe)).length)
+                }
               >
                 Check
               </Button>
@@ -462,12 +526,20 @@ function Materials() {
                 key={r.id}
                 className="group flex items-center gap-3 rounded-[var(--r-md)] px-3 py-3 transition-colors duration-[var(--t-fast)] hover:bg-[var(--surface-hi)]/60"
               >
-                <FileText size={14} className="shrink-0 text-[var(--ink-faint)]" />
+                <FileText
+                  size={14}
+                  className="shrink-0 text-[var(--ink-faint)]"
+                />
 
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[13.5px] text-[var(--ink)]">{r.title}</div>
+                  <div className="truncate text-[13.5px] text-[var(--ink)]">
+                    {r.title}
+                  </div>
                   <div className="mt-0.5 flex items-center gap-2 text-[11.5px] text-[var(--ink-faint)]">
-                    <span>{RESOURCE_KINDS.find((k) => k.value === r.kind)?.label ?? r.kind}</span>
+                    <span>
+                      {RESOURCE_KINDS.find((k) => k.value === r.kind)?.label ??
+                        r.kind}
+                    </span>
                     <span>·</span>
                     <span>{r.wordCount.toLocaleString()} words</span>
                     <span>·</span>
@@ -519,6 +591,7 @@ function Uploader({
 }) {
   const [title, setTitle] = useState("");
   const [kind, setKind] = useState<ResourceKind>("study_design");
+  const [unit, setUnit] = useState<number | null>(null);
   const [subjectId, setSubjectId] = useState<number | null>(null);
   const [pasted, setPasted] = useState("");
   const [busy, setBusy] = useState(false);
@@ -538,7 +611,11 @@ function Uploader({
     void loadFolders();
   }, [loadFolders]);
 
-  const runImport = async (path: string, forSubject: number | null, label: string) => {
+  const runImport = async (
+    path: string,
+    forSubject: number | null,
+    label: string,
+  ) => {
     setBusy(true);
     setProgress(`Reading ${label}…`);
     onError(null);
@@ -556,7 +633,10 @@ function Uploader({
   };
 
   const pickFolder = async () => {
-    const picked = await openDialog({ directory: true, title: "Choose a folder of material" });
+    const picked = await openDialog({
+      directory: true,
+      title: "Choose a folder of material",
+    });
     if (typeof picked === "string") {
       await runImport(picked, subjectId, "that folder");
     }
@@ -569,7 +649,17 @@ function Uploader({
       filters: [
         {
           name: "Documents",
-          extensions: ["pdf", "txt", "md", "markdown", "csv", "html", "rtf", "json", "tex"],
+          extensions: [
+            "pdf",
+            "txt",
+            "md",
+            "markdown",
+            "csv",
+            "html",
+            "rtf",
+            "json",
+            "tex",
+          ],
         },
       ],
     });
@@ -586,10 +676,27 @@ function Uploader({
 
         if (outcome.status === "extracted") {
           const name = outcome.name.replace(/\.[^.]+$/, "");
-          await api.addResource(subjectId, title.trim() || name, kind, outcome.name, outcome.text);
-          results.push({ name: outcome.name, outcome, resourceId: null, skippedDuplicate: false });
+          await api.addResource(
+            subjectId,
+            title.trim() || name,
+            kind,
+            unit,
+            outcome.name,
+            outcome.text,
+          );
+          results.push({
+            name: outcome.name,
+            outcome,
+            resourceId: null,
+            skippedDuplicate: false,
+          });
         } else {
-          results.push({ name: outcome.name, outcome, resourceId: null, skippedDuplicate: false });
+          results.push({
+            name: outcome.name,
+            outcome,
+            resourceId: null,
+            skippedDuplicate: false,
+          });
         }
       }
       setReport(results);
@@ -607,7 +714,14 @@ function Uploader({
     setBusy(true);
     onError(null);
     try {
-      await api.addResource(subjectId, title.trim() || "Pasted material", kind, "pasted", pasted);
+      await api.addResource(
+        subjectId,
+        title.trim() || "Pasted material",
+        kind,
+        unit,
+        "pasted",
+        pasted,
+      );
       setTitle("");
       setPasted("");
       await onAdded();
@@ -630,8 +744,9 @@ function Uploader({
             </span>
           </div>
           <p className="mt-1.5 text-[12.5px] leading-relaxed text-[var(--ink-dim)]">
-            Drop notes, past papers and the study design into the matching folder, then press
-            Sync. Files already read are skipped, so syncing again is cheap.
+            Drop notes, past papers and the study design into the matching
+            folder, then press Sync. Files already read are skipped, so syncing
+            again is cheap.
           </p>
 
           <div className="mt-3.5 space-y-1">
@@ -645,7 +760,9 @@ function Uploader({
                   <SubjectPill name={f.subjectName} colour={f.colour} dotOnly />
 
                   <button
-                    onClick={() => void api.revealFolder(f.path).catch(() => {})}
+                    onClick={() =>
+                      void api.revealFolder(f.path).catch(() => {})
+                    }
                     title="Show this folder in Finder"
                     className="pressable min-w-0 flex-1 text-left"
                   >
@@ -665,7 +782,9 @@ function Uploader({
                     size="sm"
                     variant={pending > 0 ? "primary" : "ghost"}
                     disabled={busy || f.fileCount === 0}
-                    onClick={() => void runImport(f.path, f.subjectId, f.subjectName)}
+                    onClick={() =>
+                      void runImport(f.path, f.subjectId, f.subjectName)
+                    }
                   >
                     <FolderSync size={13} />
                     Sync
@@ -687,7 +806,9 @@ function Uploader({
           />
           <select
             value={subjectId ?? ""}
-            onChange={(e) => setSubjectId(e.target.value ? Number(e.target.value) : null)}
+            onChange={(e) =>
+              setSubjectId(e.target.value ? Number(e.target.value) : null)
+            }
             className="h-9 rounded-[var(--r-sm)] border border-[var(--line)] bg-[var(--surface-hi)] px-2.5 text-[12.5px] text-[var(--ink)]"
           >
             <option value="">Any subject</option>
@@ -701,14 +822,59 @@ function Uploader({
 
         <div className="mt-3 flex flex-wrap gap-1.5">
           {RESOURCE_KINDS.map((k) => (
-            <Chip key={k.value} active={kind === k.value} onClick={() => setKind(k.value)} title={k.hint}>
+            <Chip
+              key={k.value}
+              active={kind === k.value}
+              onClick={() => {
+                setKind(k.value);
+                // A kind that spans the sequence can't carry a unit, so any
+                // previous choice is cleared rather than silently kept.
+                if (!PER_UNIT.includes(k.value)) setUnit(null);
+              }}
+              title={k.hint}
+            >
               {k.label}
             </Chip>
           ))}
         </div>
 
+        {/* Shown only for the kinds where the question has an answer. */}
+        {PER_UNIT.includes(kind) && (
+          <div className="animate-rise mt-2.5 flex flex-wrap items-center gap-1.5">
+            <span className="mr-1 text-[12px] text-[var(--ink-faint)]">
+              Unit
+            </span>
+            {[3, 4].map((u) => (
+              <Chip
+                key={u}
+                active={unit === u}
+                onClick={() => setUnit(unit === u ? null : u)}
+              >
+                {u}
+              </Chip>
+            ))}
+            {[1, 2].map((u) => (
+              <Chip
+                key={u}
+                active={unit === u}
+                onClick={() => setUnit(unit === u ? null : u)}
+              >
+                {u}
+              </Chip>
+            ))}
+            <span className="ml-1 text-[11.5px] text-[var(--ink-faint)]">
+              leave blank if it covers both
+            </span>
+          </div>
+        )}
+
         <div className="mt-3.5 flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="primary" disabled={busy} onClick={() => void pickFolder()}>
+          <Button
+            size="sm"
+            variant="primary"
+            disabled={busy}
+            onClick={() => void pickFolder()}
+          >
             <FolderOpen size={13} />
             Add a folder
           </Button>
@@ -722,7 +888,9 @@ function Uploader({
         </div>
 
         {progress && (
-          <p className="mt-2.5 text-[12.5px] text-[var(--ink-dim)]">{progress}</p>
+          <p className="mt-2.5 text-[12.5px] text-[var(--ink-dim)]">
+            {progress}
+          </p>
         )}
 
         <details className="mt-4 border-t border-[var(--line-soft)] pt-3.5">
@@ -746,7 +914,9 @@ function Uploader({
         </details>
       </Card>
 
-      {report && <ImportReport report={report} onClose={() => setReport(null)} />}
+      {report && (
+        <ImportReport report={report} onClose={() => setReport(null)} />
+      )}
     </>
   );
 }
@@ -765,7 +935,9 @@ function ImportReport({
   report: ImportedFile[];
   onClose: () => void;
 }) {
-  const added = report.filter((r) => r.outcome.status === "extracted" && !r.skippedDuplicate);
+  const added = report.filter(
+    (r) => r.outcome.status === "extracted" && !r.skippedDuplicate,
+  );
   const skipped = report.filter((r) => r.skippedDuplicate);
   const problems = report.filter((r) => r.outcome.status !== "extracted");
 
@@ -789,14 +961,18 @@ function ImportReport({
         <div className="mt-3 space-y-2">
           {problems.map((p, i) => (
             <div key={`${p.name}-${i}`} className="flex items-start gap-2">
-              <AlertTriangle size={13} className="mt-[2px] shrink-0 text-[var(--warn)]" />
+              <AlertTriangle
+                size={13}
+                className="mt-[2px] shrink-0 text-[var(--warn)]"
+              />
               <div className="min-w-0 text-[12.5px] leading-relaxed">
                 <span className="text-[var(--ink)]">{p.name}</span>
                 <span className="text-[var(--ink-dim)]">
                   {" — "}
                   {p.outcome.status === "scanned"
                     ? "a scanned PDF: its pages are images, so there's no text to read. Running it through OCR first would fix it."
-                    : p.outcome.status === "unsupported" || p.outcome.status === "failed"
+                    : p.outcome.status === "unsupported" ||
+                        p.outcome.status === "failed"
                       ? p.outcome.reason
                       : ""}
                 </span>
@@ -823,7 +999,13 @@ function ImportReport({
 }
 
 /** A quiet metadata pill for the note header. */
-function Meta({ children, mono }: { children: React.ReactNode; mono?: boolean }) {
+function Meta({
+  children,
+  mono,
+}: {
+  children: React.ReactNode;
+  mono?: boolean;
+}) {
   return (
     <span
       className={cx(

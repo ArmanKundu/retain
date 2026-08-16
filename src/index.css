@@ -108,9 +108,12 @@
   /* The capture bar sits over whatever app you were in, so it's blurrier and
      more transparent than in-app glass — the wallpaper showing through is what
      makes it read as a system utility rather than a window. */
-  --spotlight: rgba(28, 28, 32, 0.42);
-  --spotlight-line: rgba(255, 255, 255, 0.16);
-  --spotlight-blur: 64px;
+  /* Frosted glass over your wallpaper, not a dark panel sitting on top of it.
+     The previous value was opaque enough that the blur had nothing to do, which
+     is what made the bar read as a grey rectangle. */
+  --spotlight: rgba(42, 42, 48, 0.34);
+  --spotlight-line: rgba(255, 255, 255, 0.22);
+  --spotlight-blur: 48px;
 
   /* The atmospheric wash behind the app. Almost imperceptible by design: it
      gives the background depth without ever competing with content. */
@@ -200,6 +203,32 @@
     0 24px 68px rgba(0, 0, 0, 0.28),
     0 2px 10px rgba(0, 0, 0, 0.14),
     inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+/* The round mode buttons beside the bar.
+
+   Apple sets these apart from the field as separate circles rather than
+   crowding them inside it, which is what keeps a very wide bar from reading as
+   a toolbar. Same material as the pill so they belong to it. */
+.spotlight-orb {
+  background: var(--spotlight);
+  backdrop-filter: blur(var(--spotlight-blur)) saturate(190%);
+  -webkit-backdrop-filter: blur(var(--spotlight-blur)) saturate(190%);
+  border: 1px solid var(--spotlight-line);
+  box-shadow:
+    0 10px 26px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition:
+    transform var(--t-fast) var(--ease),
+    background var(--t-fast) var(--ease);
+}
+.spotlight-orb:hover {
+  transform: translateY(-1px);
+}
+.spotlight-orb[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--accent) 78%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 90%, transparent);
+  color: #fff;
 }
 
 /* The drag handle.

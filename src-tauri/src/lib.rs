@@ -359,12 +359,58 @@ fn toggle_capture_window(app: &tauri::AppHandle) {
         return;
     }
 
-    // Re-centre before showing: the user may have moved to a different display
-    // or changed resolution since the window was created at launch.
-    let _ = window.center();
+    position_over_cursor(&window);
+
+    // Follows you between Spaces rather than staying on the one it was created
+    // in. Without this, summoning it from a fullscreen Chrome either did
+    // nothing visible or yanked you back to Retain's desktop — which is what
+    // made a global hotkey feel not-global.
+    let _ = window.set_visible_on_all_workspaces(true);
+    let _ = window.set_always_on_top(true);
+
     let _ = window.show();
     let _ = window.set_focus();
     let _ = app.emit_to("capture", "capture:opened", ());
+}
+
+/// Put the bar on whichever display the pointer is on, a third of the way down.
+///
+/// `center()` centres on the *primary* display, so on a two-monitor desk the bar
+/// kept opening on the other screen. Spotlight appears where you're looking, and
+/// where you're looking is where the pointer is.
+///
+/// A third of the way down rather than the middle: a centred overlay covers the
+/// thing you were reading when you decided to write something about it.
+fn position_over_cursor(window: &tauri::WebviewWindow) {
+    use tauri::LogicalPosition;
+
+    let Ok(cursor) = window.cursor_position() else {
+        let _ = window.center();
+        return;
+    };
+
+    // `monitor_from_point` takes physical coordinates, which is what
+    // `cursor_position` already returns.
+    let monitor = match window.monitor_from_point(cursor.x, cursor.y) {
+        Ok(Some(m)) => m,
+        _ => {
+            let _ = window.center();
+            return;
+        }
+    };
+
+    let scale = monitor.scale_factor();
+    let screen = monitor.size().to_logical::<f64>(scale);
+    let origin = monitor.position().to_logical::<f64>(scale);
+    let Ok(size) = window.outer_size().map(|s| s.to_logical::<f64>(scale)) else {
+        let _ = window.center();
+        return;
+    };
+
+    let x = origin.x + (screen.width - size.width) / 2.0;
+    let y = origin.y + screen.height / 3.0 - size.height / 4.0;
+
+    let _ = window.set_position(LogicalPosition::new(x, y.max(origin.y + 24.0)));
 }
 
 /// The heartbeat.

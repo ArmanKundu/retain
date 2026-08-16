@@ -50,6 +50,9 @@ pub enum ResourceKind {
     StudyDesign,
     PastPaper,
     ExamSolution,
+    /// A school's practice exam. Not VCAA — someone's best guess at what VCAA
+    /// will ask — so it is weighted below the real thing and above notes.
+    TrialTest,
     SchoolNotes,
     PersonalNotes,
     Textbook,
@@ -61,6 +64,7 @@ impl ResourceKind {
         match self {
             ResourceKind::StudyDesign => "study_design",
             ResourceKind::PastPaper => "past_paper",
+            ResourceKind::TrialTest => "trial_test",
             ResourceKind::ExamSolution => "exam_solution",
             ResourceKind::SchoolNotes => "school_notes",
             ResourceKind::PersonalNotes => "personal_notes",
@@ -78,6 +82,7 @@ impl ResourceKind {
         match self {
             ResourceKind::StudyDesign => "Study design",
             ResourceKind::PastPaper => "Past papers",
+            ResourceKind::TrialTest => "Trial tests",
             ResourceKind::ExamSolution => "Solutions and reports",
             ResourceKind::SchoolNotes => "School notes",
             ResourceKind::PersonalNotes => "My notes",
@@ -87,16 +92,33 @@ impl ResourceKind {
     }
 
     /// Every kind, in the order they should be offered and created.
-    pub fn all() -> [ResourceKind; 7] {
+    pub fn all() -> [ResourceKind; 8] {
         [
             ResourceKind::StudyDesign,
             ResourceKind::PastPaper,
             ResourceKind::ExamSolution,
+            ResourceKind::TrialTest,
+            ResourceKind::Textbook,
             ResourceKind::SchoolNotes,
             ResourceKind::PersonalNotes,
-            ResourceKind::Textbook,
             ResourceKind::Other,
         ]
+    }
+
+    /// Whether this kind is filed per unit.
+    ///
+    /// The dimension does not apply evenly, and pretending it does is what
+    /// makes a folder tree annoying rather than useful. A study design covers
+    /// the whole 3&4 sequence; a VCAA exam examines both units in one paper; a
+    /// textbook spans the year. Asking which unit those belong to has no
+    /// answer. Your notes, your school's notes and your trial tests are the
+    /// things you genuinely keep per unit, so those are the only ones that get
+    /// a unit folder.
+    pub fn per_unit(self) -> bool {
+        matches!(
+            self,
+            ResourceKind::SchoolNotes | ResourceKind::PersonalNotes | ResourceKind::TrialTest
+        )
     }
 
     /// How much weight an answer should give this.
@@ -111,10 +133,14 @@ impl ResourceKind {
             ResourceKind::StudyDesign => 0,
             ResourceKind::ExamSolution => 1,
             ResourceKind::PastPaper => 2,
-            ResourceKind::Textbook => 3,
-            ResourceKind::SchoolNotes => 4,
-            ResourceKind::PersonalNotes => 5,
-            ResourceKind::Other => 6,
+            // A trial exam is a school's prediction of a VCAA paper. Useful, and
+            // not evidence of what VCAA actually asks — so it sits below the
+            // real paper and above anyone's notes about it.
+            ResourceKind::TrialTest => 3,
+            ResourceKind::Textbook => 4,
+            ResourceKind::SchoolNotes => 5,
+            ResourceKind::PersonalNotes => 6,
+            ResourceKind::Other => 7,
         }
     }
 
@@ -128,6 +154,7 @@ impl ResourceKind {
             ResourceKind::StudyDesign => "From the study design (authoritative on what is examinable)",
             ResourceKind::PastPaper => "From a past exam paper",
             ResourceKind::ExamSolution => "From a marking scheme or examiner's report",
+            ResourceKind::TrialTest => "From a school trial exam (not a VCAA paper)",
             ResourceKind::SchoolNotes => "From school notes",
             ResourceKind::PersonalNotes => "From the student's own notes",
             ResourceKind::Textbook => "From a textbook",
@@ -140,6 +167,7 @@ impl ResourceKind {
             "study_design" => ResourceKind::StudyDesign,
             "past_paper" => ResourceKind::PastPaper,
             "exam_solution" => ResourceKind::ExamSolution,
+            "trial_test" => ResourceKind::TrialTest,
             // Pre-migration rows said only "notes" without saying whose.
             "school_notes" | "notes" => ResourceKind::SchoolNotes,
             "personal_notes" => ResourceKind::PersonalNotes,
@@ -290,7 +318,9 @@ pub fn add_from_file(
     origin_path: Option<&str>,
     now: DateTime<Utc>,
 ) -> Result<i64> {
-    let id = add(conn, subject_id, title, kind, source, raw, now)?;
+    // The folder a file was dropped into is what says which unit it belongs to.
+    let unit = origin_path.and_then(|p| crate::workspace::unit_from_path(std::path::Path::new(p)));
+    let id = add(conn, subject_id, title, kind, unit, source, raw, now)?;
     if let Some(path) = origin_path {
         conn.execute(
             "UPDATE resources SET origin_path = ?2 WHERE id = ?1",
@@ -300,11 +330,15 @@ pub fn add_from_file(
     Ok(id)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn add(
     conn: &mut Connection,
     subject_id: Option<i64>,
     title: &str,
     kind: ResourceKind,
+    // 3, 4, or `None` for material that spans the sequence — a study design, a
+    // VCAA exam, a textbook. `None` is a real answer here, not missing data.
+    unit: Option<i64>,
     source: Option<&str>,
     raw: &str,
     now: DateTime<Utc>,
@@ -326,12 +360,16 @@ pub fn add(
 
     let tx = conn.transaction()?;
     tx.execute(
-        "INSERT INTO resources (subject_id, title, kind, source, content, word_count, added_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        "INSERT INTO resources (subject_id, title, kind, unit, source, content, word_count, added_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         rusqlite::params![
             subject_id,
             title,
             kind.as_str(),
+            // Only kinds that are genuinely filed per unit carry one; storing a
+            // unit on a study design would make it invisible to a search for the
+            // other unit's material.
+            unit.filter(|_| kind.per_unit()),
             source,
             content,
             word_count(&content),

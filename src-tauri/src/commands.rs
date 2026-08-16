@@ -16,6 +16,7 @@ use std::sync::{Arc, Mutex};
 
 use rusqlite::Connection;
 use serde::Serialize;
+use std::path::Path;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::models::*;
@@ -1620,6 +1621,7 @@ pub fn add_resource(
     subject_id: Option<i64>,
     title: String,
     kind: resources::ResourceKind,
+    unit: Option<i64>,
     source: Option<String>,
     content: String,
 ) -> CmdResult<i64> {
@@ -1629,6 +1631,9 @@ pub fn add_resource(
         subject_id,
         &title,
         kind,
+        // A file dragged in from a subject folder brings its unit with it;
+        // `source` is the original path.
+        unit.or_else(|| source.as_deref().and_then(|p| workspace::unit_from_path(Path::new(p)))),
         source.as_deref(),
         &content,
         chrono::Utc::now(),

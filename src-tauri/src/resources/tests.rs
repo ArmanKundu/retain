@@ -75,7 +75,7 @@ fn a_resource_is_stored_and_chunked() {
     let mut conn = db();
     let text: String = (0..300).map(|i| format!("Key knowledge point {i}. ")).collect();
 
-    let id = add(&mut conn, Some(1), "Study design", ResourceKind::StudyDesign,
+    let id = add(&mut conn, Some(1), "Study design", ResourceKind::StudyDesign, None,
                  Some("design.pdf"), &text, now()).unwrap();
 
     let listed = list(&conn, None).unwrap();
@@ -90,7 +90,7 @@ fn a_resource_is_stored_and_chunked() {
 #[test]
 fn an_empty_or_image_only_file_is_refused_with_a_useful_message() {
     let mut conn = db();
-    let err = add(&mut conn, None, "Scan", ResourceKind::PastPaper, None, "   \n\n ", now())
+    let err = add(&mut conn, None, "Scan", ResourceKind::PastPaper, None, None, "   \n\n ", now())
         .unwrap_err()
         .to_string();
     assert!(err.contains("scanned"), "unhelpful message: {err}");
@@ -99,8 +99,8 @@ fn an_empty_or_image_only_file_is_refused_with_a_useful_message() {
 #[test]
 fn resources_can_be_filtered_by_subject() {
     let mut conn = db();
-    add(&mut conn, Some(1), "Bio", ResourceKind::SchoolNotes, None, "mitochondria", now()).unwrap();
-    add(&mut conn, Some(2), "Chem", ResourceKind::SchoolNotes, None, "titration", now()).unwrap();
+    add(&mut conn, Some(1), "Bio", ResourceKind::SchoolNotes, None, None, "mitochondria", now()).unwrap();
+    add(&mut conn, Some(2), "Chem", ResourceKind::SchoolNotes, None, None, "titration", now()).unwrap();
 
     assert_eq!(list(&conn, Some(1)).unwrap().len(), 1);
     assert_eq!(list(&conn, Some(2)).unwrap().len(), 1);
@@ -112,7 +112,7 @@ fn resources_can_be_filtered_by_subject() {
 #[test]
 fn a_question_finds_the_relevant_excerpt() {
     let mut conn = db();
-    add(&mut conn, Some(1), "Notes", ResourceKind::SchoolNotes, None,
+    add(&mut conn, Some(1), "Notes", ResourceKind::SchoolNotes, None, None,
         "Photosynthesis occurs in the chloroplast.\n\nRespiration occurs in the mitochondria.\n\n\
          Protein synthesis begins with transcription in the nucleus.",
         now()).unwrap();
@@ -127,7 +127,7 @@ fn a_question_finds_the_relevant_excerpt() {
 #[test]
 fn punctuation_in_a_question_does_not_break_the_query() {
     let mut conn = db();
-    add(&mut conn, Some(1), "Notes", ResourceKind::SchoolNotes, None,
+    add(&mut conn, Some(1), "Notes", ResourceKind::SchoolNotes, None, None,
         "The cell's membrane is semi-permeable.", now()).unwrap();
 
     for q in [
@@ -143,7 +143,7 @@ fn punctuation_in_a_question_does_not_break_the_query() {
 #[test]
 fn a_question_of_only_stopwords_retrieves_nothing_rather_than_everything() {
     let mut conn = db();
-    add(&mut conn, Some(1), "Notes", ResourceKind::SchoolNotes, None, "Anything at all.", now()).unwrap();
+    add(&mut conn, Some(1), "Notes", ResourceKind::SchoolNotes, None, None, "Anything at all.", now()).unwrap();
 
     assert!(to_match_query("what is it and how do you do that").is_none());
     assert!(search(&conn, "what is it", None, 5).unwrap().is_empty());
@@ -152,8 +152,8 @@ fn a_question_of_only_stopwords_retrieves_nothing_rather_than_everything() {
 #[test]
 fn retrieval_can_be_scoped_to_one_subject() {
     let mut conn = db();
-    add(&mut conn, Some(1), "Bio", ResourceKind::SchoolNotes, None, "enzyme catalysis in cells", now()).unwrap();
-    add(&mut conn, Some(2), "Chem", ResourceKind::SchoolNotes, None, "enzyme catalysis in industry", now()).unwrap();
+    add(&mut conn, Some(1), "Bio", ResourceKind::SchoolNotes, None, None, "enzyme catalysis in cells", now()).unwrap();
+    add(&mut conn, Some(2), "Chem", ResourceKind::SchoolNotes, None, None, "enzyme catalysis in industry", now()).unwrap();
 
     assert_eq!(search(&conn, "enzyme catalysis", None, 10).unwrap().len(), 2);
     let bio = search(&conn, "enzyme catalysis", Some(1), 10).unwrap();
@@ -166,7 +166,7 @@ fn retrieval_can_be_scoped_to_one_subject() {
 #[test]
 fn deleting_a_resource_removes_it_from_search() {
     let mut conn = db();
-    let id = add(&mut conn, Some(1), "Old paper", ResourceKind::PastPaper, None,
+    let id = add(&mut conn, Some(1), "Old paper", ResourceKind::PastPaper, None, None,
                  "Describe the process of osmoregulation in detail.", now()).unwrap();
 
     assert!(!search(&conn, "osmoregulation", None, 5).unwrap().is_empty());

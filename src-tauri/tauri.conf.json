@@ -25,17 +25,19 @@
       {
         "label": "capture",
         "title": "Quick capture",
-        "width": 660,
-        "height": 190,
+        "width": 720,
+        "height": 460,
         "resizable": false,
         "decorations": false,
         "transparent": true,
         "alwaysOnTop": true,
         "skipTaskbar": true,
-        "center": true,
+        "center": false,
         "shadow": false,
         "focus": false,
-        "visible": false
+        "visible": false,
+        "visibleOnAllWorkspaces": true,
+        "acceptFirstMouse": true
       }
     ],
     "security": {

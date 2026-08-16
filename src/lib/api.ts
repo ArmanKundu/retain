@@ -411,10 +411,20 @@ export const api = {
     subjectId: number | null,
     title: string,
     kind: ResourceKind,
+    /** Null for material spanning the unit sequence. Inferred from the path
+        when the file came from a subject folder. */
+    unit: number | null,
     source: string | null,
     content: string,
   ) =>
-    invoke<number>("add_resource", { subjectId, title, kind, source, content }),
+    invoke<number>("add_resource", {
+      subjectId,
+      title,
+      kind,
+      unit,
+      source,
+      content,
+    }),
   deleteResource: (id: number) => invoke<void>("delete_resource", { id }),
   /** What would be retrieved for a question. No model call, so it's free. */
   searchResources: (

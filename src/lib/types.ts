@@ -580,6 +580,8 @@ export interface IntervalPreview {
 export type ResourceKind =
   | "study_design"
   | "past_paper"
+  /** A school's practice exam — a prediction of a VCAA paper, not one. */
+  | "trial_test"
   | "exam_solution"
   | "school_notes"
   | "personal_notes"
@@ -592,6 +594,14 @@ export interface Resource {
   subjectName: string | null;
   title: string;
   kind: ResourceKind;
+  /**
+   * 3, 4, or null for material that spans the sequence.
+   *
+   * Null is a real answer, not missing data: a study design covers both units
+   * and a VCAA exam examines both in one paper. Only notes and trial tests are
+   * genuinely filed per unit.
+   */
+  unit: number | null;
   source: string | null;
   wordCount: number;
   chunkCount: number;

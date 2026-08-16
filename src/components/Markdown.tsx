@@ -1,3 +1,25 @@
+/** `| a | b |` — a row has a pipe at each end and at least one inside. */
+export function isTableRow(line: string): boolean {
+  return (
+    line.startsWith("|") &&
+    line.endsWith("|") &&
+    line.slice(1, -1).includes("|")
+  );
+}
+
+/** `|---|:--:|` — the line that makes the row above a header rather than prose. */
+export function isTableDivider(line: string): boolean {
+  const t = line.trim();
+  return isTableRow(t) && /^[|\s:-]+$/.test(t);
+}
+
+export function tableCells(line: string): string[] {
+  return line
+    .slice(1, -1)
+    .split("|")
+    .map((c) => c.trim());
+}
+
 // A small Markdown renderer.
 //
 // Saved notes were displayed as raw text, so a generated note arrived looking
@@ -71,7 +93,13 @@ function inline(text: string, keyPrefix: string): ReactNode[] {
  * items and paragraph lines. Anything unrecognised falls through as a
  * paragraph, so unusual input degrades to readable prose rather than vanishing.
  */
-export function Markdown({ source, className }: { source: string; className?: string }) {
+export function Markdown({
+  source,
+  className,
+}: {
+  source: string;
+  className?: string;
+}) {
   const lines = source.replace(/\r/g, "").split("\n");
   const blocks: ReactNode[] = [];
 
@@ -82,7 +110,10 @@ export function Markdown({ source, className }: { source: string; className?: st
     if (paragraph.length === 0) return;
     const text = paragraph.join(" ");
     blocks.push(
-      <p key={`p-${blocks.length}`} className="text-[15px] leading-[1.7] text-[var(--ink-dim)]">
+      <p
+        key={`p-${blocks.length}`}
+        className="text-[15px] leading-[1.7] text-[var(--ink-dim)]"
+      >
         {inline(text, `p${blocks.length}`)}
       </p>,
     );
@@ -116,12 +147,77 @@ export function Markdown({ source, className }: { source: string; className?: st
     flushList();
   };
 
-  for (const raw of lines) {
-    const line = raw.trimEnd();
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trimEnd();
     const trimmed = line.trim();
 
     if (trimmed === "") {
       flushAll();
+      continue;
+    }
+
+    // Tables.
+    //
+    // Added because the notes prompt now asks for one whenever two things are
+    // being compared — a comparison written as prose is one you have to
+    // re-read. Without this the pipes rendered as literal text, which would
+    // have made generated notes worse rather than better.
+    //
+    // A table is a header row, a `|---|---|` separator, then body rows. The
+    // separator is what distinguishes it from a paragraph that happens to
+    // contain a pipe.
+    if (
+      isTableRow(trimmed) &&
+      i + 1 < lines.length &&
+      isTableDivider(lines[i + 1])
+    ) {
+      flushAll();
+
+      const header = tableCells(trimmed);
+      const rows: string[][] = [];
+      let j = i + 2;
+      while (j < lines.length && isTableRow(lines[j].trim())) {
+        rows.push(tableCells(lines[j].trim()));
+        j++;
+      }
+      i = j - 1;
+
+      blocks.push(
+        // Scrolls inside itself rather than widening the page: a wide table in
+        // a fixed column otherwise pushes every other block sideways.
+        <div key={blocks.length} className="overflow-x-auto">
+          <table className="w-full border-collapse text-[13px]">
+            <thead>
+              <tr>
+                {header.map((cell, n) => (
+                  <th
+                    key={n}
+                    className="border border-[var(--line)] bg-[var(--surface-hi)] px-2.5 py-1.5 text-left font-medium text-[var(--ink)]"
+                  >
+                    {inline(cell, `th-${blocks.length}-${n}`)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, n) => (
+                <tr key={n}>
+                  {/* Padded to the header's width. A ragged row from a model
+                      would otherwise collapse the grid. */}
+                  {header.map((_, m) => (
+                    <td
+                      key={m}
+                      className="border border-[var(--line)] px-2.5 py-1.5 align-top text-[var(--ink-dim)]"
+                    >
+                      {inline(row[m] ?? "", `td-${blocks.length}-${n}-${m}`)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>,
+      );
       continue;
     }
 
@@ -140,7 +236,10 @@ export function Markdown({ source, className }: { source: string; className?: st
       blocks.push(
         <h3
           key={`h-${blocks.length}`}
-          className={cx("font-semibold tracking-[-0.015em] text-[var(--ink)]", size)}
+          className={cx(
+            "font-semibold tracking-[-0.015em] text-[var(--ink)]",
+            size,
+          )}
         >
           {inline(text, `h${blocks.length}`)}
         </h3>,

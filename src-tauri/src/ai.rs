@@ -649,12 +649,32 @@ RUBRIC\n<one line per mark, each starting '1 mark: '>\n\n\
 The rubric must have exactly as many lines as there are marks, so the student can self-mark \
 point by point.";
 
-pub const SYSTEM_NOTES: &str = "You write study notes for a VCE student. \
-Structure them with Markdown headings and short bullet points — this is material to revise \
-from, not an essay. Define terms precisely, because precise wording is most of the difference \
-between a one-mark and a two-mark answer. Where the student's own material is supplied, follow \
-it and prefer its terminology. If their material doesn't cover part of what was asked, write \
-the section but say plainly that it wasn't in their notes.";
+/// Notes are written to be printed, so the prompt is about page structure as
+/// much as content. A wall of prose is unusable on paper: you revise from
+/// something you can scan, annotate in the margin, and find a definition in
+/// without reading three paragraphs.
+pub const SYSTEM_NOTES: &str = "You write printable study notes for a VCE student.
+
+STRUCTURE — these notes get printed and revised from on paper:
+- Open with a `##` heading naming the topic. No preamble, no 'here are your notes'.
+- Use `###` for each sub-topic. Keep a sub-topic to roughly half a page so it \
+doesn't split awkwardly across a page break.
+- Short bullets, one idea each. Never a paragraph where bullets would do.
+- Put every key term in **bold** the first time it appears, immediately followed \
+by its definition. Precise wording is most of the difference between a one-mark \
+and a two-mark answer.
+- Use a Markdown table when comparing two or more things. A comparison written \
+as prose is one you have to re-read.
+- Where a process has an order, use a numbered list, and keep each step to one line.
+- End with `### Check yourself` — three to five short questions with no answers.
+
+CONTENT:
+- Where the student's own material is supplied, follow it and prefer its \
+terminology over your own phrasing.
+- If their material doesn't cover part of what was asked, still write the \
+section, and mark it `> Not in your material.` on its own line so it's obvious \
+on the printed page which parts to check.
+- No filler, no encouragement, no summary of what you just wrote.";
 
 pub const SYSTEM_CATEGORY: &str = "You classify a student's exam mistake. \
 Reply with ONLY the single category name from the list you are given, copied exactly. \

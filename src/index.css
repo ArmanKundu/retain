@@ -498,6 +498,29 @@ textarea:focus-visible,
    "print my notes" not actually work in most web-shaped apps.
    --------------------------------------------------------------------------- */
 
+/* Printing ------------------------------------------------------------------
+
+   Notes are generated to be printed, so this is a real page stylesheet rather
+   than a screenshot of the app with the chrome hidden. What it fixes:
+
+   * **A serif at a reading size.** The UI sans at 14px is right on a backlit
+     screen and wrong on paper.
+   * **Headings that stay with their content.** A `###` alone at the bottom of
+     a page is the classic print bug and makes revision notes hard to scan.
+   * **Real margins**, so there is room to annotate — which is most of why you
+     print notes at all rather than reading them on the screen.
+   * **Ink economy.** Dark backgrounds and accent colours print as grey mush and
+     empty a cartridge; everything resolves to black on white.
+
+   `⌘P → Save as PDF` in the macOS print dialog turns this into the PDF. */
+
+@page {
+  size: A4;
+  /* Wide right margin: notes you can write in the margin of are worth more
+     than notes you can't. */
+  margin: 18mm 22mm 18mm 18mm;
+}
+
 @media print {
   body * {
     visibility: hidden;
@@ -515,15 +538,128 @@ textarea:focus-visible,
     max-height: none !important;
     overflow: visible !important;
     padding: 0 !important;
-    color: #000;
-    background: #fff;
+
+    /* Everything to black on white. An accent colour prints grey and a dark
+       surface prints as a solid block of toner. */
+    color: #000 !important;
+    background: #fff !important;
+    font-family: Georgia, "Iowan Old Style", "Times New Roman", serif;
+    font-size: 10.5pt;
+    line-height: 1.55;
+  }
+
+  .print-target * {
+    color: #000 !important;
+    background: transparent !important;
+    border-color: #bbb !important;
+    box-shadow: none !important;
+  }
+
+  /* The header block, which only exists on paper: which subject, what topic,
+     when it was generated. A printed page with no title is one you can't file. */
+  .print-header {
+    display: block !important;
+    margin-bottom: 8mm;
+    padding-bottom: 3mm;
+    border-bottom: 1px solid #000;
+  }
+  .print-header .print-title {
+    font-size: 15pt;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .print-header .print-meta {
+    margin-top: 1mm;
+    font-size: 9pt;
+    color: #444 !important;
+  }
+
+  .print-target h1,
+  .print-target h2,
+  .print-target h3,
+  .print-target h4 {
+    font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+    /* A heading orphaned at the foot of a page is the classic print bug. */
+    break-after: avoid;
+    page-break-after: avoid;
+    break-inside: avoid;
+  }
+  .print-target h2 {
+    font-size: 13pt;
+    margin: 6mm 0 2mm;
+  }
+  .print-target h3 {
+    font-size: 11pt;
+    margin: 5mm 0 1.5mm;
+  }
+
+  .print-target p,
+  .print-target li {
+    orphans: 3;
+    widows: 3;
+  }
+  .print-target li {
+    margin-bottom: 0.6mm;
+  }
+  .print-target ul,
+  .print-target ol {
+    margin: 1.5mm 0 2.5mm 5mm;
+  }
+
+  /* A table split across a page break loses its header and becomes unreadable,
+     and comparison tables are short by nature. */
+  .print-target table {
+    width: 100%;
+    border-collapse: collapse;
+    break-inside: avoid;
+    margin: 3mm 0;
+    font-size: 9.5pt;
+  }
+  .print-target th,
+  .print-target td {
+    border: 1px solid #999 !important;
+    padding: 1.5mm 2mm;
+    text-align: left;
+    vertical-align: top;
+  }
+  .print-target th {
+    background: #eee !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    font-weight: 700;
+  }
+
+  /* "Not in your material" markers. A rule beside them survives greyscale,
+     where a background tint would not. */
+  .print-target blockquote {
+    border-left: 2pt solid #000 !important;
+    margin: 2.5mm 0;
+    padding-left: 3mm;
+    font-style: italic;
+    break-inside: avoid;
+  }
+
+  .print-target img {
+    max-width: 100%;
+    break-inside: avoid;
   }
 
   .print-target pre {
     white-space: pre-wrap;
-    font-size: 11pt;
-    line-height: 1.6;
+    font-size: 9.5pt;
+    line-height: 1.5;
   }
+
+  /* Anything explicitly marked as screen furniture — buttons, toolbars — never
+     reaches the page even when nested inside the printed region. */
+  .print-hide {
+    display: none !important;
+  }
+}
+
+/* Only ever visible on paper. */
+.print-header {
+  display: none;
 }
 
 /* ---------------------------------------------------------------------------

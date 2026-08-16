@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   AlertTriangle,
+  ChevronRight,
   Download,
   FileText,
   FolderOpen,
@@ -29,6 +30,7 @@ import { Chip, SectionHeader, SubjectPill } from "../components/primitives";
 import { Button, Card, Empty, cx } from "../components/ui";
 import { api } from "../lib/api";
 import type {
+  Excerpt,
   GroundedText,
   ImportedFile,
   LibraryItem,
@@ -378,8 +380,19 @@ function ItemViewer({
         {/* `print-target` is what the print stylesheet keeps; everything else on
             the page is hidden when printing. */}
         <div className="print-target selectable min-h-0 flex-1 overflow-y-auto px-9 pb-8">
+          {/* Paper only. A printed page with no title is one you can't file,
+              and a stack of untitled notes is why people stop printing them. */}
+          <header className="print-header">
+            <div className="print-title">{item.title}</div>
+            <div className="print-meta">
+              {[item.subjectName, new Date(item.createdAt).toLocaleDateString()]
+                .filter(Boolean)
+                .join(" · ")}
+            </div>
+          </header>
+
           {item.prompt && (
-            <p className="mb-6 border-l-2 border-[var(--line)] pl-3.5 text-[13px] italic leading-relaxed text-[var(--ink-faint)]">
+            <p className="print-hide mb-6 border-l-2 border-[var(--line)] pl-3.5 text-[13px] italic leading-relaxed text-[var(--ink-faint)]">
               {item.prompt}
             </p>
           )}
@@ -403,9 +416,12 @@ function ItemViewer({
             Save as Markdown
           </Button>
 
+          {/* macOS's print dialog has "Save as PDF" in its corner, so this is
+              also the PDF export — and it goes through the same page stylesheet
+              the printer would use, rather than a second renderer that drifts. */}
           <Button size="sm" onClick={() => window.print()}>
             <Printer size={13} />
-            Print
+            Print or save as PDF
           </Button>
 
           <Button
@@ -443,7 +459,12 @@ function Materials() {
   const [list, setList] = useState<Resource[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [probe, setProbe] = useState("");
-  const [hits, setHits] = useState<number | null>(null);
+  // The excerpts themselves, not a count. "6 passages match" tells you nothing
+  // you can act on — which six documents, and what they actually say, is the
+  // answer to "have I got anything on this".
+  const [hits, setHits] = useState<Excerpt[] | null>(null);
+  // Subjects start collapsed once there are enough of them to scroll past.
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     try {
@@ -494,19 +515,13 @@ function Materials() {
                 size="sm"
                 disabled={probe.trim().length < 3}
                 onClick={async () =>
-                  setHits((await api.searchResources(probe)).length)
+                  setHits(await api.searchResources(probe, null, 40))
                 }
               >
                 Check
               </Button>
             </div>
-            {hits !== null && (
-              <p className="mt-2.5 text-[12.5px] text-[var(--ink-dim)]">
-                {hits === 0
-                  ? "Nothing in your material matches those words. A generated answer on this would come from the model's own knowledge."
-                  : `${hits} passage${hits === 1 ? "" : "s"} match. An answer on this would be grounded in your material.`}
-              </p>
-            )}
+            {hits !== null && <Coverage hits={hits} />}
           </Card>
         </section>
       )}
@@ -521,54 +536,207 @@ function Materials() {
           </Card>
         ) : (
           <div className="-mx-3">
-            {list.map((r) => (
-              <div
-                key={r.id}
-                className="group flex items-center gap-3 rounded-[var(--r-md)] px-3 py-3 transition-colors duration-[var(--t-fast)] hover:bg-[var(--surface-hi)]/60"
-              >
-                <FileText
-                  size={14}
-                  className="shrink-0 text-[var(--ink-faint)]"
-                />
-
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[13.5px] text-[var(--ink)]">
-                    {r.title}
-                  </div>
-                  <div className="mt-0.5 flex items-center gap-2 text-[11.5px] text-[var(--ink-faint)]">
-                    <span>
-                      {RESOURCE_KINDS.find((k) => k.value === r.kind)?.label ??
-                        r.kind}
-                    </span>
-                    <span>·</span>
-                    <span>{r.wordCount.toLocaleString()} words</span>
-                    <span>·</span>
-                    <span>{r.chunkCount} passages</span>
-                  </div>
-                </div>
-
-                {r.subjectName && (
-                  <span className="shrink-0 text-[11.5px] text-[var(--ink-faint)]">
-                    {r.subjectName}
-                  </span>
-                )}
-
+            {groupBySubject(list).map(([subject, items]) => (
+              <div key={subject} className="mb-1">
+                {/* One row per subject rather than 131 rows in one column. A
+                    list you have to scroll past to reach anything isn't a
+                    library, it's a directory listing. */}
                 <button
-                  onClick={async () => {
-                    await api.deleteResource(r.id);
-                    await load();
-                  }}
-                  aria-label={`Remove ${r.title}`}
-                  className="pressable rounded-[var(--r-sm)] p-1.5 text-[var(--ink-faint)] opacity-0 transition-all duration-[var(--t-fast)] hover:text-[var(--danger)] group-hover:opacity-100 focus-visible:opacity-100"
+                  onClick={() =>
+                    setCollapsed((c) => {
+                      const next = new Set(c);
+                      if (next.has(subject)) next.delete(subject);
+                      else next.add(subject);
+                      return next;
+                    })
+                  }
+                  className="flex w-full items-center gap-2 rounded-[var(--r-md)] px-3 py-2 text-left hover:bg-[var(--surface-hi)]/60"
                 >
-                  <Trash2 size={13} />
+                  <ChevronRight
+                    size={13}
+                    className={cx(
+                      "shrink-0 text-[var(--ink-faint)] transition-transform duration-[var(--t-fast)]",
+                      !collapsed.has(subject) && "rotate-90",
+                    )}
+                  />
+                  <span className="text-[13px] text-[var(--ink)]">
+                    {subject}
+                  </span>
+                  <span className="text-[11.5px] text-[var(--ink-faint)]">
+                    {items.length}{" "}
+                    {items.length === 1 ? "document" : "documents"} ·{" "}
+                    {items
+                      .reduce((n, r) => n + r.wordCount, 0)
+                      .toLocaleString()}{" "}
+                    words
+                  </span>
                 </button>
+
+                {!collapsed.has(subject) &&
+                  items.map((r) => (
+                    <div
+                      key={r.id}
+                      className="group flex items-center gap-3 rounded-[var(--r-md)] px-3 py-3 transition-colors duration-[var(--t-fast)] hover:bg-[var(--surface-hi)]/60"
+                    >
+                      <FileText
+                        size={14}
+                        className="shrink-0 text-[var(--ink-faint)]"
+                      />
+
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[13.5px] text-[var(--ink)]">
+                          {r.title}
+                        </div>
+                        <div className="mt-0.5 flex items-center gap-2 text-[11.5px] text-[var(--ink-faint)]">
+                          <span>
+                            {RESOURCE_KINDS.find((k) => k.value === r.kind)
+                              ?.label ?? r.kind}
+                          </span>
+                          <span>·</span>
+                          <span>{r.wordCount.toLocaleString()} words</span>
+                          <span>·</span>
+                          <span>{r.chunkCount} passages</span>
+                        </div>
+                      </div>
+
+                      {r.subjectName && (
+                        <span className="shrink-0 text-[11.5px] text-[var(--ink-faint)]">
+                          {r.subjectName}
+                        </span>
+                      )}
+
+                      <button
+                        onClick={async () => {
+                          await api.deleteResource(r.id);
+                          await load();
+                        }}
+                        aria-label={`Remove ${r.title}`}
+                        className="pressable rounded-[var(--r-sm)] p-1.5 text-[var(--ink-faint)] opacity-0 transition-all duration-[var(--t-fast)] hover:text-[var(--danger)] group-hover:opacity-100 focus-visible:opacity-100"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  ))}
               </div>
             ))}
           </div>
         )}
       </section>
     </>
+  );
+}
+
+/**
+ * Documents by subject, ordered by authority within each.
+ *
+ * Authority order matters more than alphabetical: what you want to see first
+ * when you open Chemistry is the study design, not "2022 neap units 3 4".
+ */
+function groupBySubject(list: Resource[]): [string, Resource[]][] {
+  const order = RESOURCE_KINDS.map((k) => k.value);
+  const groups = new Map<string, Resource[]>();
+
+  for (const r of list) {
+    const key = r.subjectName ?? "Unfiled";
+    const bucket = groups.get(key);
+    if (bucket) bucket.push(r);
+    else groups.set(key, [r]);
+  }
+
+  for (const items of groups.values()) {
+    items.sort(
+      (a, b) =>
+        order.indexOf(a.kind) - order.indexOf(b.kind) ||
+        a.title.localeCompare(b.title),
+    );
+  }
+
+  // Unfiled last — it's the bucket for things that haven't been sorted, not a
+  // subject you study.
+  return [...groups.entries()].sort(([a], [b]) =>
+    a === "Unfiled" ? 1 : b === "Unfiled" ? -1 : a.localeCompare(b),
+  );
+}
+
+/**
+ * What a coverage check actually found.
+ *
+ * It used to report a number. "6 passages match" is not an answer to "have I
+ * got anything on this" — six passages of the study design and six of a past
+ * paper mean different things, and one strong hit in the right document beats
+ * six weak ones scattered across your notes. So this names the documents,
+ * counts the hits in each, and shows the best passage from the most
+ * authoritative one so you can see whether it is actually relevant.
+ */
+function Coverage({ hits }: { hits: Excerpt[] }) {
+  if (hits.length === 0) {
+    return (
+      <p className="mt-2.5 text-[12.5px] leading-relaxed text-[var(--ink-dim)]">
+        Nothing in your material matches those words. A generated answer on this
+        would come from the model's own knowledge rather than your documents.
+      </p>
+    );
+  }
+
+  const byDoc = new Map<
+    number,
+    { title: string; kind: ResourceKind; hits: Excerpt[] }
+  >();
+  for (const h of hits) {
+    const found = byDoc.get(h.resourceId);
+    if (found) found.hits.push(h);
+    else
+      byDoc.set(h.resourceId, {
+        title: h.resourceTitle,
+        kind: h.kind,
+        hits: [h],
+      });
+  }
+
+  // Already returned in authority order by the backend, so the first document
+  // is the one an answer would lean on hardest.
+  const docs = [...byDoc.values()];
+
+  return (
+    <div className="mt-3">
+      <p className="text-[12.5px] leading-relaxed text-[var(--ink-dim)]">
+        {hits.length} {hits.length === 1 ? "passage" : "passages"} across{" "}
+        {docs.length} {docs.length === 1 ? "document" : "documents"}. An answer
+        would be grounded in these.
+      </p>
+
+      <ul className="mt-2 space-y-1">
+        {docs.slice(0, 6).map((d, i) => (
+          <li
+            key={d.title}
+            className="rounded-[var(--r-sm)] bg-[var(--surface-hi)]/60 px-3 py-2"
+          >
+            <div className="flex items-baseline gap-2">
+              <span className="truncate text-[12.5px] text-[var(--ink)]">
+                {d.title}
+              </span>
+              <span className="shrink-0 text-[11px] text-[var(--ink-faint)]">
+                {RESOURCE_KINDS.find((k) => k.value === d.kind)?.label ??
+                  d.kind}{" "}
+                · {d.hits.length}
+              </span>
+            </div>
+            {/* Only the strongest document gets a passage. Six snippets is the
+                wall this replaced. */}
+            {i === 0 && (
+              <p className="mt-1 line-clamp-2 text-[11.5px] leading-relaxed text-[var(--ink-faint)]">
+                {d.hits[0].content}
+              </p>
+            )}
+          </li>
+        ))}
+        {docs.length > 6 && (
+          <li className="px-3 text-[11.5px] text-[var(--ink-faint)]">
+            and {docs.length - 6} more
+          </li>
+        )}
+      </ul>
+    </div>
   );
 }
 

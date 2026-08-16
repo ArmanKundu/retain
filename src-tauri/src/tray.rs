@@ -124,6 +124,12 @@ pub fn build(app: &AppHandle) -> anyhow::Result<TrayHandles> {
 }
 
 pub fn show_main_window(app: &AppHandle) {
+    // Closing the window hides the whole application, so the app itself has to
+    // come back before its window can. Showing the window alone leaves it
+    // hidden behind whatever you switched to.
+    #[cfg(target_os = "macos")]
+    let _ = app.show();
+
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.unminimize();

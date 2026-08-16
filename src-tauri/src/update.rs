@@ -50,6 +50,9 @@ pub enum UpdateStatus {
         latest: String,
         url: String,
         notes: Option<String>,
+        /// Direct link to the `.dmg`, when the release has one. Without it the
+        /// UI can still offer the page, but cannot install for you.
+        download_url: Option<String>,
     },
     /// The check couldn't complete. Deliberately distinct from `UpToDate`:
     /// reporting "you're up to date" when we never got an answer is a lie.
@@ -136,6 +139,28 @@ struct GithubRelease {
     draft: bool,
     #[serde(default)]
     prerelease: bool,
+    #[serde(default)]
+    assets: Vec<GithubAsset>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct GithubAsset {
+    name: String,
+    browser_download_url: String,
+}
+
+/// The `.dmg` on a release, if there is exactly one to be confident about.
+///
+/// Matched on the extension rather than the filename, which carries the version
+/// and would need updating every release. Anything not served from
+/// `github.com` is rejected here rather than at download time — this URL comes
+/// off the network and ends up naming a file that gets mounted.
+fn dmg_asset(assets: &[GithubAsset]) -> Option<String> {
+    assets
+        .iter()
+        .find(|a| a.name.to_lowercase().ends_with(".dmg"))
+        .map(|a| a.browser_download_url.clone())
+        .filter(|u| is_safe_release_url(u).is_ok())
 }
 
 /// Ask GitHub. Never panics, never blocks anything else.
@@ -205,6 +230,7 @@ pub async fn check(current: &str) -> UpdateStatus {
             latest: tag.trim().to_string(),
             url: release.html_url.unwrap_or_else(|| RELEASES_PAGE.to_string()),
             notes: release.body.map(|b| truncate_notes(&b)),
+            download_url: dmg_asset(&release.assets),
         }
     } else {
         UpdateStatus::UpToDate {
@@ -300,6 +326,159 @@ pub fn is_safe_release_url(url: &str) -> Result<()> {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Installing an update
+// ---------------------------------------------------------------------------
+
+/// Download a release DMG, replace the installed app with it, and clean up.
+///
+/// This is what "press Update and it happens" costs when the app isn't signed
+/// by Apple and so can't use a notarised updater. The steps are the ones you
+/// were doing by hand: fetch the disk image, mount it, copy the new bundle over
+/// the old one, unmount, throw the image away.
+///
+/// # Why each step is the way it is
+///
+/// * **`ditto` rather than a recursive copy.** A `.app` is a directory whose
+///   symlinks, permissions and extended attributes are load-bearing; a naive
+///   copy produces a bundle macOS refuses to launch.
+/// * **The new bundle goes to a staging path first**, then swaps. Copying
+///   directly over a running app can leave a half-written bundle if anything
+///   fails partway, and a half-written bundle is an app you can no longer open
+///   *or* update.
+/// * **Only `/Applications` and the user's own `Applications`** are accepted as
+///   install locations. Running from a mounted DMG or from a Downloads folder
+///   means the "installed" copy isn't where the user thinks it is, and writing
+///   there would leave two divergent copies.
+///
+/// Returns the path that was replaced, so the caller can relaunch it.
+pub async fn install(download_url: &str, app_path: &std::path::Path) -> Result<std::path::PathBuf> {
+    use std::process::Command;
+
+    is_safe_release_url(download_url)?;
+
+    let target = installed_bundle(app_path)?;
+
+    let staging = std::env::temp_dir().join(format!("retain-update-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&staging);
+    std::fs::create_dir_all(&staging)?;
+
+    // --- download ----------------------------------------------------------
+    let dmg = staging.join("Retain.dmg");
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(300))
+        .build()?;
+    let bytes = client
+        .get(download_url)
+        .header("user-agent", "Retain-updater")
+        .send()
+        .await?
+        .error_for_status()?
+        .bytes()
+        .await?;
+
+    // A DMG smaller than a megabyte is an error page, not a disk image, and
+    // mounting one produces a baffling failure instead of a clear one.
+    if bytes.len() < 1_000_000 {
+        return Err(anyhow!("That download didn't look like a disk image."));
+    }
+    std::fs::write(&dmg, &bytes)?;
+
+    // --- mount -------------------------------------------------------------
+    let mount = staging.join("mnt");
+    std::fs::create_dir_all(&mount)?;
+
+    let attach = Command::new("/usr/bin/hdiutil")
+        .args(["attach", "-nobrowse", "-quiet", "-mountpoint"])
+        .arg(&mount)
+        .arg(&dmg)
+        .status()?;
+    if !attach.success() {
+        return Err(anyhow!("Couldn't open the downloaded disk image."));
+    }
+
+    // Everything past here must unmount, including on the error paths — a
+    // leaked mount survives the app quitting and clutters Finder until reboot.
+    let result = swap_bundle(&mount, &target, &staging);
+
+    let _ = Command::new("/usr/bin/hdiutil")
+        .args(["detach", "-quiet"])
+        .arg(&mount)
+        .status();
+    let _ = std::fs::remove_dir_all(&staging);
+
+    result.map(|()| target)
+}
+
+/// Copy the new bundle out of the mounted image and put it in place.
+fn swap_bundle(
+    mount: &std::path::Path,
+    target: &std::path::Path,
+    staging: &std::path::Path,
+) -> Result<()> {
+    use std::process::Command;
+
+    let source = std::fs::read_dir(mount)?
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .find(|p| p.extension().is_some_and(|x| x == "app"))
+        .ok_or_else(|| anyhow!("That disk image has no app in it."))?;
+
+    // Staged first so a failed copy can't leave a half-written bundle where the
+    // working app used to be.
+    let staged = staging.join("Retain.app");
+    let copy = Command::new("/usr/bin/ditto").arg(&source).arg(&staged).status()?;
+    if !copy.success() {
+        return Err(anyhow!("Couldn't copy the new version out of the disk image."));
+    }
+
+    // The old bundle moves aside rather than being deleted outright, so a
+    // failure here leaves something to go back to.
+    let backup = staging.join("previous.app");
+    if target.exists() {
+        std::fs::rename(target, &backup)
+            .map_err(|e| anyhow!("Couldn't move the old version aside: {e}"))?;
+    }
+
+    if let Err(e) = std::fs::rename(&staged, target) {
+        // Put it back. Failing an update is recoverable; leaving no app at all
+        // is not.
+        if backup.exists() {
+            let _ = std::fs::rename(&backup, target);
+        }
+        return Err(anyhow!("Couldn't install the new version: {e}"));
+    }
+
+    Ok(())
+}
+
+/// The installed `.app` this process is running from.
+///
+/// Refuses anything outside an Applications folder. Updating a copy running
+/// from Downloads, or from a mounted image, would install into a place the user
+/// doesn't think of as "the app" and leave two versions disagreeing.
+pub fn installed_bundle(exe: &std::path::Path) -> Result<std::path::PathBuf> {
+    // …/Retain.app/Contents/MacOS/retain → …/Retain.app
+    let bundle = exe
+        .ancestors()
+        .find(|p| p.extension().is_some_and(|x| x == "app"))
+        .ok_or_else(|| anyhow!("Retain isn't running from an app bundle."))?;
+
+    let parent = bundle.parent().unwrap_or(std::path::Path::new(""));
+    let ok = parent == std::path::Path::new("/Applications")
+        || parent.ends_with("Applications");
+
+    if !ok {
+        return Err(anyhow!(
+            "Retain is running from {}, not an Applications folder. Move it to Applications \
+             first and updates will install themselves from then on.",
+            parent.display()
+        ));
+    }
+
+    Ok(bundle.to_path_buf())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -307,6 +486,64 @@ mod tests {
 
     fn now() -> DateTime<Utc> {
         Utc.with_ymd_and_hms(2026, 8, 13, 12, 0, 0).unwrap()
+    }
+
+    // -- where an update may install --------------------------------------
+
+    /// Updating a copy running from Downloads, or from a mounted disk image,
+    /// would install into somewhere the user doesn't think of as "the app" and
+    /// leave two versions disagreeing about which is current.
+    #[test]
+    fn only_a_bundle_in_an_applications_folder_can_be_replaced() {
+        use std::path::Path;
+
+        assert_eq!(
+            installed_bundle(Path::new("/Applications/Retain.app/Contents/MacOS/retain")).unwrap(),
+            Path::new("/Applications/Retain.app")
+        );
+        // A per-user Applications folder is a normal place to install.
+        assert!(installed_bundle(Path::new(
+            "/Users/armankundu/Applications/Retain.app/Contents/MacOS/retain"
+        ))
+        .is_ok());
+
+        for bad in [
+            "/Users/armankundu/Downloads/Retain.app/Contents/MacOS/retain",
+            "/Volumes/Retain/Retain.app/Contents/MacOS/retain",
+            "/Users/armankundu/Desktop/Retain.app/Contents/MacOS/retain",
+        ] {
+            assert!(installed_bundle(Path::new(bad)).is_err(), "{bad}");
+        }
+
+        // Not a bundle at all — a `cargo run` binary, say.
+        assert!(installed_bundle(Path::new("/Users/x/proj/target/debug/retain")).is_err());
+    }
+
+    /// The download URL comes off the network and ends up naming a file that
+    /// gets mounted, so it is checked at the point it is read.
+    #[test]
+    fn a_download_link_off_github_is_not_offered() {
+        let asset = |name: &str, url: &str| GithubAsset {
+            name: name.into(),
+            browser_download_url: url.into(),
+        };
+
+        assert_eq!(
+            dmg_asset(&[asset("Retain_0.10.0_x64.dmg", "https://github.com/a/b/x.dmg")]),
+            Some("https://github.com/a/b/x.dmg".to_string())
+        );
+
+        // Right extension, wrong host.
+        assert_eq!(
+            dmg_asset(&[asset("Retain.dmg", "https://evil.example.com/Retain.dmg")]),
+            None
+        );
+        // Right host, not a disk image.
+        assert_eq!(
+            dmg_asset(&[asset("notes.txt", "https://github.com/a/b/notes.txt")]),
+            None
+        );
+        assert_eq!(dmg_asset(&[]), None);
     }
 
     // -- version parsing ---------------------------------------------------
@@ -408,6 +645,7 @@ mod tests {
             latest: "0.2.0".into(),
             url: "https://github.com/x/y/releases/tag/v0.2.0".into(),
             notes: Some("Stuff".into()),
+            download_url: None,
         };
 
         store(&conn, &status, now()).unwrap();
@@ -430,6 +668,7 @@ mod tests {
                 latest: "0.2.0".into(),
                 url: "https://github.com/x/y".into(),
                 notes: None,
+            download_url: None,
             },
             now(),
         )

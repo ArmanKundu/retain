@@ -550,6 +550,9 @@ export type UpdateStatus =
       latest: string;
       url: string;
       notes: string | null;
+      /** Direct link to the .dmg, when the release has one. Null means the
+          update can be opened in a browser but not installed for you. */
+      downloadUrl: string | null;
     }
   /** Distinct from upToDate on purpose: we never got an answer. */
   | { status: "unknown"; current: string; reason: string };

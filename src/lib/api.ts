@@ -489,6 +489,12 @@ export const api = {
   /** One day's timetable, with rooms, teachers and subject colours. */
   daySchedule: (localDate: string) =>
     invoke<ScheduledClass[]>("day_schedule", { localDate }),
+  /**
+   * Download, install and relaunch. The app quits at the end — its own bundle
+   * has just been replaced, so this call never returns normally.
+   */
+  installUpdate: (downloadUrl: string) =>
+    invoke<void>("install_update", { downloadUrl }),
   conversationMarkdown: (conversationId: number) =>
     invoke<string>("conversation_markdown", { conversationId }),
 

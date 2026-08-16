@@ -2535,3 +2535,49 @@ pub struct ScheduledClass {
     pub ends_at: Option<String>,
     pub all_day: bool,
 }
+
+/// Download the new version, install it over this one, and restart.
+///
+/// The manual routine this replaces was: open the release page, download the
+/// DMG, mount it, drag the app across, confirm the replacement, eject the
+/// image, delete the download. Seven steps, and the last two get skipped, which
+/// is why Downloads fills with old disk images.
+///
+/// The app quits at the end rather than trying to keep running: the bundle it
+/// was launched from has just been replaced underneath it, and a process whose
+/// own executable no longer exists is one bad code path away from a crash you
+/// can't diagnose. Relaunch is handed to `open`, which starts the *new* bundle
+/// after this process is gone.
+#[tauri::command]
+pub async fn install_update(app: AppHandle, download_url: String) -> CmdResult<()> {
+    let exe = std::env::current_exe().map_err(|e| CommandError(e.to_string()))?;
+
+    // Checked before downloading anything, so "you need to move Retain to
+    // Applications first" arrives in a second rather than after 30MB.
+    let target = update::installed_bundle(&exe).map_err(|e| CommandError(e.to_string()))?;
+
+    update::install(&download_url, &exe)
+        .await
+        .map_err(|e| CommandError(e.to_string()))?;
+
+    // `open -n` on the new bundle, scheduled far enough out that this process
+    // has exited — launching the app while the old one still holds the database
+    // would have two writers on one SQLite file.
+    std::process::Command::new("/bin/sh")
+        .arg("-c")
+        .arg(format!("sleep 1; /usr/bin/open -n {}", shell_quote(&target.to_string_lossy())))
+        .spawn()
+        .map_err(|e| CommandError(format!("Installed, but couldn't relaunch: {e}")))?;
+
+    app.exit(0);
+    Ok(())
+}
+
+/// Single-quote a path for `sh -c`.
+///
+/// The path comes from `current_exe`, not from the network, but it is still a
+/// string being handed to a shell — and "it can't contain anything odd today"
+/// is not a property worth relying on.
+fn shell_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', r"'\''"))
+}

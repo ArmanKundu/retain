@@ -154,7 +154,7 @@ pub fn run() {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == "main" {
                     api.prevent_close();
-                    let _ = window.hide();
+                    dismiss_main_window(window);
                 }
             }
         })
@@ -252,6 +252,7 @@ pub fn run() {
             commands::apply_assistant_action,
             commands::capture_screen,
             commands::day_schedule,
+            commands::install_update,
             commands::preview_intervals,
             // Resources and the saved-output library.
             commands::list_resources,
@@ -312,8 +313,21 @@ pub fn run() {
             commands::export_to_file,
             commands::import_json,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Retain");
+        .build(tauri::generate_context!())
+        .expect("error while building Retain")
+        .run(|app, event| {
+            // Clicking the dock icon after the window has been put away.
+            //
+            // Closing hides the app rather than quitting, so without this there
+            // is no way back to the window except the menu bar — and a dock
+            // icon that does nothing when clicked reads as a hung app.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = event {
+                tray::show_main_window(app);
+            }
+
+            let _ = (app, event);
+        });
 }
 
 /// Register ⌘⇧Space and wire it to the capture window.
@@ -347,6 +361,42 @@ fn register_capture_shortcut(app: &tauri::AppHandle) -> anyhow::Result<()> {
     use tauri_plugin_global_shortcut::GlobalShortcutExt;
     app.global_shortcut().register(combo)?;
     Ok(())
+}
+
+/// Put the main window away without quitting.
+///
+/// Hiding a window that is in macOS fullscreen leaves the Space it owned behind
+/// with nothing in it, and an empty Space renders as a black screen with
+/// Retain still in the menu bar — which looks exactly like a hang, and left the
+/// only way out as force-quitting.
+///
+/// So fullscreen is exited first. That transition is animated and asynchronous:
+/// hiding during it is what produces the black frame, so the hide waits for it
+/// to finish. `app.hide()` then takes the whole application out of the
+/// foreground, which is what makes macOS switch back to whatever you were doing
+/// rather than leaving you staring at an empty desktop.
+fn dismiss_main_window(window: &tauri::Window) {
+    let was_fullscreen = window.is_fullscreen().unwrap_or(false);
+
+    if was_fullscreen {
+        let _ = window.set_fullscreen(false);
+    }
+
+    let window = window.clone();
+    std::thread::spawn(move || {
+        if was_fullscreen {
+            // Long enough for AppKit's fullscreen exit, which is a fixed ~0.5s
+            // animation. Hiding earlier is the bug this exists to avoid.
+            std::thread::sleep(std::time::Duration::from_millis(700));
+        }
+        let _ = window.hide();
+
+        #[cfg(target_os = "macos")]
+        {
+            use tauri::Manager;
+            let _ = window.app_handle().hide();
+        }
+    });
 }
 
 /// Show the capture window, or hide it if it's already up.

@@ -81,6 +81,7 @@ import type {
   AssistantTurn,
   Applied,
   Proposal,
+  ScheduledClass,
 } from "./types";
 
 export const api = {
@@ -485,6 +486,9 @@ export const api = {
     invoke<Applied>("apply_assistant_action", { action }),
   /** One screenshot, returned as a data URL. Nothing is stored or watched. */
   captureScreen: () => invoke<string>("capture_screen"),
+  /** One day's timetable, with rooms, teachers and subject colours. */
+  daySchedule: (localDate: string) =>
+    invoke<ScheduledClass[]>("day_schedule", { localDate }),
   conversationMarkdown: (conversationId: number) =>
     invoke<string>("conversation_markdown", { conversationId }),
 

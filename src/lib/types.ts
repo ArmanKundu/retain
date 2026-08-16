@@ -884,3 +884,22 @@ export interface Rollover {
     reason: string;
   }[];
 }
+
+/**
+ * One entry on a day's timetable, decoded from what Compass sends.
+ *
+ * Compass splits a class across three ICS properties and none is a sentence:
+ * SUMMARY is a code (`11CHEU2`), LOCATION is a room, DESCRIPTION is the
+ * teacher. `subjectName` is null when the code isn't one of your subjects — an
+ * assembly, a formal — and inventing one for those is worse than silence.
+ */
+export interface ScheduledClass {
+  code: string;
+  subjectName: string | null;
+  colour: string | null;
+  room: string | null;
+  teacher: string | null;
+  startsAt: string;
+  endsAt: string | null;
+  allDay: boolean;
+}

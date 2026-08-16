@@ -2472,3 +2472,66 @@ pub fn run_rollover(state: State<'_, AppState>, force: bool) -> CmdResult<plan::
     }
     Ok(plan::rollover(&conn, today)?)
 }
+
+/// One day's timetable, decoded into something worth reading.
+///
+/// The Today screen previously listed seven days of raw class codes — a wall of
+/// `11ENGT2`, `11ACCQ`, `12BIOS` with times beside them and nothing else. Every
+/// detail that makes a timetable useful (which subject, which room, which
+/// teacher) was either dropped at import or never joined to your subjects.
+#[tauri::command]
+pub fn day_schedule(state: State<'_, AppState>, local_date: String) -> CmdResult<Vec<ScheduledClass>> {
+    let conn = db(&state);
+
+    // Name and colour, so a class can be shown in its subject's colour rather
+    // than as another grey row.
+    let subjects: Vec<(String, String)> = {
+        let mut stmt =
+            conn.prepare("SELECT name, colour FROM subjects WHERE archived = 0 ORDER BY sort_order")?;
+        let rows = stmt
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+        rows
+    };
+
+    let mut stmt = conn.prepare(
+        "SELECT summary, description, location, starts_at, ends_at, all_day
+           FROM calendar_events
+          WHERE local_date = ?1
+          ORDER BY all_day DESC, starts_at, id",
+    )?;
+
+    let rows = stmt
+        .query_map([&local_date], |r| {
+            let summary: String = r.get(0)?;
+            let description: Option<String> = r.get(1)?;
+            let location: Option<String> = r.get(2)?;
+            Ok((
+                summary,
+                description,
+                location,
+                r.get::<_, String>(3)?,
+                r.get::<_, Option<String>>(4)?,
+                r.get::<_, i64>(5)? == 1,
+            ))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(rows
+        .into_iter()
+        .map(|(summary, description, location, starts_at, ends_at, all_day)| {
+            let detail = ics::describe(&summary, description.as_deref(), location.as_deref(), &subjects);
+            ScheduledClass { detail, starts_at, ends_at, all_day }
+        })
+        .collect())
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScheduledClass {
+    #[serde(flatten)]
+    pub detail: ics::ClassDetail,
+    pub starts_at: String,
+    pub ends_at: Option<String>,
+    pub all_day: bool,
+}

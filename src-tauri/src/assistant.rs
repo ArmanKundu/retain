@@ -290,6 +290,13 @@ pub fn app_context(conn: &Connection) -> String {
     let commitments = crate::blocks::week_summary(conn, crate::util::retain_today_naive())
         .unwrap_or_default();
 
+    // Today's classes, with rooms. "When am I free?" and "what have I got
+    // before Chemistry?" are questions about a real timetable, and without this
+    // the assistant answers them from the blocks you typed in by hand while
+    // ignoring the seven periods the school already told it about.
+    let today_classes = crate::ics::day_summary(conn, &chrono::Local::now().date_naive().to_string())
+        .unwrap_or_default();
+
     // What they meant to do today, and what has been slipping. Without this the
     // assistant answers "what should I work on?" from scratch every time and
     // ignores the plan sitting on the screen next to it.
@@ -307,6 +314,10 @@ pub fn app_context(conn: &Connection) -> String {
     if !commitments.is_empty() {
         out.push('\n');
         out.push_str(&commitments);
+    }
+    if !today_classes.is_empty() {
+        out.push('\n');
+        out.push_str(&today_classes);
     }
     if !today_plan.is_empty() {
         out.push('\n');

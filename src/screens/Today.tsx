@@ -15,8 +15,9 @@ import { useEffect, useState } from "react";
 import { ArrowRight, Flame, Layers, Play, Shield } from "lucide-react";
 
 import { DayPlan } from "../components/DayPlan";
+import { DaySchedule } from "../components/DaySchedule";
+import { LookingAhead } from "../components/LookingAhead";
 import { GoalRing } from "../components/GoalRing";
-import { UpcomingEvents } from "../components/UpcomingEvents";
 import { SectionHeader, SubjectPill } from "../components/primitives";
 import { Button, cx } from "../components/ui";
 import { api } from "../lib/api";
@@ -172,6 +173,8 @@ export function Today() {
         )}
       </div>
 
+      <DaySchedule />
+
       <DayPlan subjects={subjects} />
 
       {rings.length > 0 && (
@@ -185,7 +188,7 @@ export function Today() {
         </section>
       )}
 
-      <UpcomingEvents />
+      <LookingAhead />
 
       <section className="animate-rise">
         <SectionHeader title="Recent sessions" />

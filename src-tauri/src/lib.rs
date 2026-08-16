@@ -251,6 +251,7 @@ pub fn run() {
             commands::run_rollover,
             commands::apply_assistant_action,
             commands::capture_screen,
+            commands::day_schedule,
             commands::preview_intervals,
             // Resources and the saved-output library.
             commands::list_resources,

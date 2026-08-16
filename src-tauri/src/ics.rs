@@ -552,6 +552,8 @@ pub struct CalendarEvent {
     pub recurrence_id: Option<String>,
     pub summary: String,
     pub description: Option<String>,
+    /// The room, from LOCATION.
+    pub location: Option<String>,
     pub starts_at: String,
     pub ends_at: Option<String>,
     pub all_day: bool,
@@ -564,6 +566,8 @@ struct RawEvent {
     uid: String,
     summary: String,
     description: Option<String>,
+    /// The room. Compass puts it in LOCATION, which was previously discarded.
+    location: Option<String>,
     start: IcsTime,
     end: Option<IcsTime>,
     rrule: Option<Rrule>,
@@ -604,6 +608,7 @@ pub fn parse_calendar(raw: &str, local_tz: Tz, now: DateTime<Utc>) -> Result<Vec
                     uid: String::new(),
                     summary: String::new(),
                     description: None,
+                    location: None,
                     start: IcsTime::Utc(now),
                     end: None,
                     rrule: None,
@@ -641,6 +646,12 @@ pub fn parse_calendar(raw: &str, local_tz: Tz, now: DateTime<Utc>) -> Result<Vec
                 let d = unescape(&p.value).trim().to_string();
                 if !d.is_empty() {
                     ev.description = Some(d);
+                }
+            }
+            "LOCATION" => {
+                let l = unescape(&p.value).trim().to_string();
+                if !l.is_empty() {
+                    ev.location = Some(l);
                 }
             }
             "DTSTART" => {
@@ -827,6 +838,7 @@ fn build(
             ev.summary.clone()
         },
         description: ev.description.clone(),
+        location: ev.location.clone(),
         starts_at: start.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
         ends_at: end.map(|e| e.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
         all_day,
@@ -938,9 +950,9 @@ pub fn store(conn: &mut Connection, events: &[CalendarEvent]) -> Result<usize> {
     {
         let mut stmt = tx.prepare(
             "INSERT OR REPLACE INTO calendar_events
-               (uid, recurrence_id, summary, description, starts_at, ends_at,
+               (uid, recurrence_id, summary, description, location, starts_at, ends_at,
                 all_day, local_date, fetched_at)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
         )?;
 
         for e in events {
@@ -949,6 +961,7 @@ pub fn store(conn: &mut Connection, events: &[CalendarEvent]) -> Result<usize> {
                 e.recurrence_id,
                 e.summary,
                 e.description,
+                e.location,
                 e.starts_at,
                 e.ends_at,
                 e.all_day as i64,
@@ -984,7 +997,8 @@ pub fn upcoming(conn: &Connection, days: i64, limit: i64) -> Result<Vec<Calendar
     let to = from + Duration::days(days);
 
     let mut stmt = conn.prepare(
-        "SELECT uid, recurrence_id, summary, description, starts_at, ends_at, all_day, local_date
+        "SELECT uid, recurrence_id, summary, description, starts_at, ends_at, all_day, local_date,
+                location
            FROM calendar_events
           WHERE local_date BETWEEN ?1 AND ?2
           ORDER BY starts_at, id
@@ -1004,6 +1018,7 @@ pub fn upcoming(conn: &Connection, days: i64, limit: i64) -> Result<Vec<Calendar
                     recurrence_id: r.get(1)?,
                     summary: r.get(2)?,
                     description: r.get(3)?,
+                    location: r.get(8)?,
                     starts_at: r.get(4)?,
                     ends_at: r.get(5)?,
                     all_day: r.get::<_, i64>(6)? == 1,
@@ -1030,4 +1045,162 @@ pub fn local_tz() -> Tz {
         .ok()
         .and_then(|name| name.parse::<Tz>().ok())
         .unwrap_or(chrono_tz::Australia::Melbourne)
+}
+
+// ---------------------------------------------------------------------------
+// Making a Compass class readable
+// ---------------------------------------------------------------------------
+
+/// A class, decoded from what Compass actually sends.
+///
+/// Compass splits a class across three ICS properties and none of them is a
+/// sentence: SUMMARY is a class code (`11CHEU2`), LOCATION is a room (`T3`),
+/// DESCRIPTION is `Attending Staff : BGY`. Shown raw, Today said "11CHEU2" and
+/// nothing else — which is the one thing you already know at 8:25am.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClassDetail {
+    /// The raw code, kept because it's what's printed on your timetable.
+    pub code: String,
+    /// The subject, matched against your own subject list. `None` when the code
+    /// belongs to something that isn't one of your subjects — an assembly, a
+    /// formal — and inventing a subject for those would be worse than silence.
+    pub subject_name: Option<String>,
+    pub colour: Option<String>,
+    pub room: Option<String>,
+    pub teacher: Option<String>,
+}
+
+/// Pull the teacher out of Compass's description line.
+///
+/// The format is `Attending Staff : BGY`, occasionally with several initials.
+/// Anything that doesn't look like that is left alone rather than guessed at.
+pub fn teacher_from_description(description: Option<&str>) -> Option<String> {
+    let d = description?.trim();
+    let rest = d
+        .strip_prefix("Attending Staff :")
+        .or_else(|| d.strip_prefix("Attending Staff:"))?;
+    let name = rest.trim();
+    (!name.is_empty()).then(|| name.to_string())
+}
+
+/// The letters at the heart of a class code.
+///
+/// `11CHEU2` → `CHEU`, `12BIOS` → `BIOS`, `11MMEP2` → `MMEP`. Compass codes are
+/// a year prefix, a subject stem, and a group suffix; the stem is the only part
+/// that identifies the subject.
+fn code_stem(code: &str) -> String {
+    code.chars()
+        .skip_while(|c| c.is_ascii_digit())
+        .take_while(|c| c.is_ascii_alphabetic())
+        .collect::<String>()
+        .to_uppercase()
+}
+
+/// Match a class code to one of the student's subjects.
+///
+/// Matched on the code's stem against the subject name's initials and its first
+/// letters, which covers the shapes Compass uses: `CHEU`→Chemistry,
+/// `BIOS`→Biology, `MMEP`→Mathematical Methods, `SMAR`→Specialist Mathematics.
+///
+/// A code with no match returns `None`. That is deliberate: `ASMEDA` is a year
+/// level assembly, and filing it under whichever subject shares two letters
+/// would put a fake Biology class on your timetable.
+pub fn match_subject<'a>(code: &str, subjects: &'a [(String, String)]) -> Option<&'a (String, String)> {
+    let stem = code_stem(code);
+    if stem.len() < 3 {
+        return None;
+    }
+
+    subjects.iter().find(|(name, _)| {
+        let upper = name.to_uppercase();
+
+        // "Mathematical Methods" → "MM", matching the MMEP stem.
+        let initials: String = upper
+            .split_whitespace()
+            .filter_map(|w| w.chars().next())
+            .collect();
+
+        // The first letters of the first word: "CHEMISTRY" → "CHE" for CHEU.
+        let first_word = upper.split_whitespace().next().unwrap_or("");
+
+        (initials.len() >= 2 && stem.starts_with(&initials))
+            || (first_word.len() >= 3 && stem.starts_with(&first_word[..3.min(first_word.len())]))
+    })
+}
+
+/// Decode one event into something worth putting on a screen.
+pub fn describe(
+    summary: &str,
+    description: Option<&str>,
+    location: Option<&str>,
+    subjects: &[(String, String)],
+) -> ClassDetail {
+    let code = summary.trim().to_string();
+    let matched = match_subject(&code, subjects);
+
+    ClassDetail {
+        subject_name: matched.map(|(n, _)| n.clone()),
+        colour: matched.map(|(_, c)| c.clone()),
+        room: location.map(str::trim).filter(|l| !l.is_empty()).map(str::to_string),
+        teacher: teacher_from_description(description),
+        code,
+    }
+}
+
+/// One day's classes as prose, for the assistant's context.
+///
+/// Rooms and teachers included: "what have I got before Chemistry" and "where
+/// am I at 11" are questions about a real timetable, and a list of bare codes
+/// can't answer either.
+pub fn day_summary(conn: &Connection, local_date: &str) -> Result<String> {
+    let subjects: Vec<(String, String)> = {
+        let mut stmt =
+            conn.prepare("SELECT name, colour FROM subjects WHERE archived = 0 ORDER BY sort_order")?;
+        let rows = stmt
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+        rows
+    };
+
+    let mut stmt = conn.prepare(
+        "SELECT summary, description, location, starts_at, all_day
+           FROM calendar_events WHERE local_date = ?1 ORDER BY all_day DESC, starts_at",
+    )?;
+    // summary, description, location, starts_at, all_day
+    type Row = (String, Option<String>, Option<String>, String, bool);
+    let rows: Vec<Row> = stmt
+        .query_map([local_date], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get::<_, i64>(4)? == 1))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    if rows.is_empty() {
+        return Ok(String::new());
+    }
+
+    let mut out = String::from("Classes today:\n");
+    for (summary, description, location, starts_at, all_day) in rows {
+        let d = describe(&summary, description.as_deref(), location.as_deref(), &subjects);
+        let name = d.subject_name.unwrap_or_else(|| d.code.clone());
+
+        let when = if all_day {
+            "all day".to_string()
+        } else {
+            DateTime::parse_from_rfc3339(&starts_at)
+                .map(|t| t.with_timezone(&chrono::Local).format("%-I:%M%P").to_string())
+                .unwrap_or_else(|_| "?".into())
+        };
+
+        let mut line = format!("- {when} {name}");
+        if let Some(room) = d.room {
+            line.push_str(&format!(" in {room}"));
+        }
+        if let Some(teacher) = d.teacher {
+            line.push_str(&format!(" with {teacher}"));
+        }
+        out.push_str(&line);
+        out.push('\n');
+    }
+    Ok(out)
 }

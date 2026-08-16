@@ -34,6 +34,7 @@ const MIGRATIONS: &[(i32, &str)] = &[
     (8, include_str!("db/migrations/008_plan.sql")),
     (9, include_str!("db/migrations/009_message_images.sql")),
     (10, include_str!("db/migrations/010_units.sql")),
+    (11, include_str!("db/migrations/011_event_detail.sql")),
 ];
 
 /// How many automatic snapshots to keep before deleting the oldest.

@@ -446,11 +446,16 @@ fn an_event_with_no_summary_gets_a_readable_placeholder() {
 // Storage
 // ---------------------------------------------------------------------------
 
+/// The real migration chain, not a hand-picked subset.
+///
+/// This used to apply 001 and 002 by hand, which meant the schema these tests
+/// ran against silently stopped being the schema the app has — a column added
+/// in a later migration was missing here and every calendar test failed on it.
+/// A fixture that drifts from production tests the fixture.
 fn db() -> Connection {
     let conn = Connection::open_in_memory().unwrap();
     conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
-    conn.execute_batch(include_str!("../db/migrations/001_init.sql")).unwrap();
-    conn.execute_batch(include_str!("../db/migrations/002_capture_cards_errors.sql")).unwrap();
+    crate::db::run_migrations(&conn).unwrap();
     conn
 }
 
@@ -645,4 +650,103 @@ fn turning_the_calendar_off_hides_events_without_deleting_them() {
         .query_row("SELECT COUNT(*) FROM calendar_events", [], |r| r.get(0))
         .unwrap();
     assert_eq!(n, 1);
+}
+
+// -- decoding a Compass class -----------------------------------------------
+//
+// Every code below is one of Arman's real ones, taken from the live calendar.
+
+/// The subject list as it actually is: name and colour.
+fn subjects() -> Vec<(String, String)> {
+    vec![
+        ("Biology".into(), "#4BA97B".into()),
+        ("Chemistry".into(), "#5B7FD4".into()),
+        ("English".into(), "#D0603C".into()),
+        ("Accounting".into(), "#8A6FD6".into()),
+        ("Specialist Mathematics".into(), "#D08B3C".into()),
+        ("Mathematical Methods".into(), "#3CA8D0".into()),
+    ]
+}
+
+#[test]
+fn real_class_codes_resolve_to_the_right_subject() {
+    let s = subjects();
+
+    for (code, expected) in [
+        ("11CHEU2", "Chemistry"),
+        ("12BIOS", "Biology"),
+        ("11ENGT2", "English"),
+        ("11ACCQ", "Accounting"),
+        ("11SMAR", "Specialist Mathematics"),
+        ("11MMEP2", "Mathematical Methods"),
+    ] {
+        let got = match_subject(code, &s).map(|(n, _)| n.as_str());
+        assert_eq!(got, Some(expected), "{code}");
+    }
+}
+
+/// `11ASMEDA` is a year-level assembly. Filing it under whichever subject
+/// happens to share two letters would put a class you don't have on your
+/// timetable, which is worse than showing the bare code.
+#[test]
+fn a_code_that_is_not_one_of_your_subjects_matches_nothing() {
+    let s = subjects();
+
+    assert!(match_subject("11ASMEDA", &s).is_none());
+    assert!(match_subject("VSMF", &s).is_none());
+    assert!(match_subject("11", &s).is_none(), "digits alone are not a code");
+    assert!(match_subject("", &s).is_none());
+}
+
+#[test]
+fn the_teacher_comes_out_of_compasss_description_line() {
+    assert_eq!(teacher_from_description(Some("Attending Staff : BGY")), Some("BGY".into()));
+    assert_eq!(teacher_from_description(Some("Attending Staff : MD14 - BFU")), Some("MD14 - BFU".into()));
+
+    // Anything not in that shape is left alone rather than guessed at.
+    assert_eq!(teacher_from_description(Some("Bring your textbook")), None);
+    assert_eq!(teacher_from_description(Some("Attending Staff :   ")), None);
+    assert_eq!(teacher_from_description(None), None);
+}
+
+#[test]
+fn a_class_decodes_into_everything_worth_showing() {
+    let got = describe("11CHEU2", Some("Attending Staff : BGY"), Some("T3"), &subjects());
+
+    assert_eq!(got.code, "11CHEU2");
+    assert_eq!(got.subject_name.as_deref(), Some("Chemistry"));
+    assert_eq!(got.colour.as_deref(), Some("#5B7FD4"));
+    assert_eq!(got.room.as_deref(), Some("T3"));
+    assert_eq!(got.teacher.as_deref(), Some("BGY"));
+}
+
+/// A whole-school event has no code, no room and no teacher, and must still
+/// come through with its name intact rather than being dropped or mangled.
+#[test]
+fn an_event_that_is_not_a_class_keeps_its_name() {
+    let got = describe("Parent-Student-Teacher Conferences", None, None, &subjects());
+
+    assert_eq!(got.code, "Parent-Student-Teacher Conferences");
+    assert_eq!(got.subject_name, None);
+    assert_eq!(got.room, None);
+    assert_eq!(got.teacher, None);
+}
+
+/// LOCATION was parsed nowhere, so the room never reached the database — the
+/// one detail you most want at 8:25 on a Monday.
+#[test]
+fn the_room_is_read_from_the_location_property() {
+    let events = parse(
+        "BEGIN:VEVENT\r\n\
+         UID:class-1\r\n\
+         SUMMARY:11CHEU2\r\n\
+         LOCATION:T3\r\n\
+         DESCRIPTION:Attending Staff : BGY\r\n\
+         DTSTART:20260817T012500Z\r\n\
+         DTEND:20260817T022500Z\r\n\
+         END:VEVENT",
+    );
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].location.as_deref(), Some("T3"));
+    assert_eq!(events[0].description.as_deref(), Some("Attending Staff : BGY"));
 }

@@ -80,6 +80,7 @@
 
 :root {
   /* Geometry. Four steps, and pills. Anything not on this scale is a bug. */
+  --r-xs: 3px; /* chart marks: heatmap bars, sparkline ticks */
   --r-sm: 10px; /* small controls: chips, inputs, icon buttons */
   --r-md: 14px; /* buttons, list rows, compact panels */
   --r-lg: 20px; /* cards and panels */
@@ -576,5 +577,66 @@ textarea:focus-visible,
   }
   .flip-inner.is-flipped .flip-face:not(.is-back) {
     visibility: hidden;
+  }
+}
+
+/* The card, and the pile behind it -----------------------------------------
+
+   Two things a flashcard app has to get right physically.
+
+   **The flip has to have weight.** A card that swaps its face instantly reads
+   as a state change; a card that turns over reads as an object. The spring
+   below overshoots very slightly at the end, which is what the eye reads as
+   mass — a pure ease-out feels like a slide.
+
+   **The pile has to shrink.** Showing one card at a time hides the only
+   progress signal that matters mid-session. The stack behind the card is two
+   real elements at decreasing scale and opacity, so "four left" is something
+   you see rather than something you read. */
+
+.card-scene {
+  perspective: 1600px;
+}
+
+.card-flipper {
+  position: relative;
+  transform-style: preserve-3d;
+  /* A spring, not an ease. The slight overshoot past 1 is the weight. */
+  transition: transform 520ms cubic-bezier(0.34, 1.42, 0.44, 1);
+}
+.card-flipper[data-flipped="true"] {
+  transform: rotateY(180deg);
+}
+
+.card-face {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.card-face-back {
+  position: absolute;
+  inset: 0;
+  transform: rotateY(180deg);
+}
+
+/* One sheet of the pile. Scaled and pushed down so the edges show. */
+.card-stack-sheet {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r-xl);
+  border: 1px solid var(--line-soft);
+  background: var(--surface);
+  transition:
+    transform var(--t-base) var(--ease),
+    opacity var(--t-base) var(--ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The flip is the one animation here that carries meaning, so it stays —
+     but at a speed that won't trigger anything. */
+  .card-flipper {
+    transition-duration: 1ms;
+  }
+  .card-stack-sheet {
+    transition-duration: 1ms;
   }
 }

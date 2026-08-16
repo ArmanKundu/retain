@@ -82,6 +82,10 @@ import type {
   Applied,
   Proposal,
   ScheduledClass,
+  SubjectMastery,
+  TopicMastery,
+  DeckStats,
+  RatingPreview,
 } from "./types";
 
 export const api = {
@@ -495,6 +499,23 @@ export const api = {
    */
   installUpdate: (downloadUrl: string) =>
     invoke<void>("install_update", { downloadUrl }),
+
+  // -- browsing a deck ------------------------------------------------------
+  subjectMastery: () => invoke<SubjectMastery[]>("subject_mastery"),
+  topicMastery: (subjectId: number) =>
+    invoke<TopicMastery[]>("topic_mastery", { subjectId }),
+  deckStats: (subjectId: number, topicId: number | null) =>
+    invoke<DeckStats>("deck_stats", { subjectId, topicId }),
+  /** Cards to go through without touching the schedule. Never writes. */
+  practiceQueue: (subjectId: number, topicId: number | null, limit?: number) =>
+    invoke<QueueItem[]>("practice_queue", {
+      subjectId,
+      topicId,
+      limit: limit ?? null,
+    }),
+  /** What each rating would do to this card's interval. */
+  ratingPreviews: (cardId: number) =>
+    invoke<RatingPreview>("rating_previews", { cardId }),
   conversationMarkdown: (conversationId: number) =>
     invoke<string>("conversation_markdown", { conversationId }),
 

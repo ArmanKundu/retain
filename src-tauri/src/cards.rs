@@ -1189,3 +1189,45 @@ mod preview_tests {
         assert!(days[2] <= days[3], "Good must not exceed Easy: {days:?}");
     }
 }
+
+/// Cards for practice: no due dates, no scheduling, nothing written back.
+///
+/// The review queue is the right way to learn and the wrong tool three days
+/// before a SAC, when you want to go through Genetics *now* regardless of what
+/// FSRS thinks. Doing that through the real queue would be actively harmful:
+/// answering forty cards early tells the scheduler you needed them early, and
+/// it shortens every one of their intervals in response. A week of cramming
+/// would leave your schedule permanently worse.
+///
+/// So practice reads and never writes. Nothing here touches `cards`, and
+/// nothing reaches `review_log` — which also means a practice run cannot
+/// manufacture a streak day.
+pub fn practice(
+    conn: &Connection,
+    subject_id: i64,
+    topic_id: Option<i64>,
+    limit: i64,
+) -> anyhow::Result<Vec<QueueItem>> {
+    // Weakest first: lowest stability, then least-reviewed. Practice exists to
+    // find the gaps, and starting with the cards you already know is a
+    // pleasant way to learn nothing.
+    let sql = format!(
+        "SELECT {ITEM_COLUMNS}
+           FROM cards c JOIN subjects s ON s.id = c.subject_id
+          WHERE c.subject_id = ?1 AND c.suspended = 0 {}
+          ORDER BY COALESCE(c.stability, 0), c.reps, c.id
+          LIMIT ?2",
+        if topic_id.is_some() { "AND c.topic_id = ?3" } else { "" }
+    );
+
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = match topic_id {
+        Some(t) => stmt
+            .query_map(rusqlite::params![subject_id, limit, t], row_to_item)?
+            .collect::<Result<Vec<_>, _>>()?,
+        None => stmt
+            .query_map(rusqlite::params![subject_id, limit], row_to_item)?
+            .collect::<Result<Vec<_>, _>>()?,
+    };
+    Ok(rows)
+}

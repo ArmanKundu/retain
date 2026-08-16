@@ -906,3 +906,59 @@ export interface ScheduledClass {
   endsAt: string | null;
   allDay: boolean;
 }
+
+/**
+ * How much of a deck you actually hold.
+ *
+ * `mastered` counts cards whose FSRS stability is a fortnight or more — not
+ * cards you got right recently. A card answered correctly twice today scores
+ * 100% on accuracy and will be gone by Thursday; stability is about the memory
+ * rather than the last quiz. See `src-tauri/src/mastery.rs`.
+ */
+export interface Strength {
+  total: number;
+  new: number;
+  learning: number;
+  mastered: number;
+  /** Forgotten eight times or more — worth rewriting, not redoing. */
+  leeches: number;
+  suspended: number;
+  dueToday: number;
+  /** 0 when the deck is empty, never 1. */
+  mastery: number;
+  nextDueOn: string | null;
+}
+
+export interface SubjectMastery extends Strength {
+  subjectId: number;
+  name: string;
+  colour: string;
+}
+
+export interface TopicMastery extends Strength {
+  /** Null is the real bucket for unfiled cards, which is most of them. */
+  topicId: number | null;
+  name: string;
+}
+
+export interface DayAccuracy {
+  date: string;
+  reviews: number;
+  accuracy: number;
+}
+
+export interface DeckStats extends Strength {
+  recentReviews: number;
+  /** Null when nothing has been reviewed — different from 0%. */
+  recentAccuracy: number | null;
+  recent: DayAccuracy[];
+  averageStability: number | null;
+}
+
+/** Days until the card is next due, per rating. Null = back today. */
+export interface RatingPreview {
+  again: number | null;
+  hard: number | null;
+  good: number | null;
+  easy: number | null;
+}

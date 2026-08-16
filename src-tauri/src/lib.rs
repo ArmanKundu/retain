@@ -9,6 +9,7 @@ mod export;
 mod idle;
 mod ingest;
 mod inbox;
+mod mastery;
 mod models;
 mod notifications;
 mod plan;
@@ -253,6 +254,11 @@ pub fn run() {
             commands::capture_screen,
             commands::day_schedule,
             commands::install_update,
+            commands::subject_mastery,
+            commands::topic_mastery,
+            commands::deck_stats,
+            commands::practice_queue,
+            commands::rating_previews,
             commands::preview_intervals,
             // Resources and the saved-output library.
             commands::list_resources,

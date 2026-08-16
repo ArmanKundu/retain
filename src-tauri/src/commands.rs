@@ -23,7 +23,7 @@ use crate::models::*;
 use crate::timer::{self, ActiveTimer, SharedTimer};
 use crate::tray::TrayHandles;
 use crate::scheduler;
-use crate::{ai, assessments, assistant, biology, blocks, capture, ics, ingest, library, resources, update, workspace, cards, errors, export, inbox, notifications, plan, provider, screen, secrets, settings, streak, subjects, tools};
+use crate::{ai, assessments, assistant, biology, blocks, capture, ics, ingest, library, resources, update, workspace, cards, errors, export, inbox, mastery, notifications, plan, provider, screen, secrets, settings, streak, subjects, tools};
 
 /// Shared state, created in `lib.rs` and handed to every command.
 pub struct AppState {
@@ -2580,4 +2580,90 @@ pub async fn install_update(app: AppHandle, download_url: String) -> CmdResult<(
 /// is not a property worth relying on.
 fn shell_quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', r"'\''"))
+}
+
+// ---------------------------------------------------------------------------
+// Browsing a deck, rather than being handed the next card
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn subject_mastery(state: State<'_, AppState>) -> CmdResult<Vec<mastery::SubjectMastery>> {
+    Ok(mastery::by_subject(&db(&state), chrono::Local::now().date_naive())?)
+}
+
+#[tauri::command]
+pub fn topic_mastery(
+    state: State<'_, AppState>,
+    subject_id: i64,
+) -> CmdResult<Vec<mastery::TopicMastery>> {
+    Ok(mastery::by_topic(&db(&state), subject_id, chrono::Local::now().date_naive())?)
+}
+
+#[tauri::command]
+pub fn deck_stats(
+    state: State<'_, AppState>,
+    subject_id: i64,
+    topic_id: Option<i64>,
+) -> CmdResult<mastery::DeckStats> {
+    Ok(mastery::deck(
+        &db(&state),
+        subject_id,
+        topic_id,
+        chrono::Local::now().date_naive(),
+        30,
+    )?)
+}
+
+/// Cards to go through without touching the schedule.
+///
+/// See `cards::practice` — answering early through the real queue would tell
+/// FSRS you needed those cards early and shorten every interval in response, so
+/// a week of cramming would leave your schedule permanently worse.
+#[tauri::command]
+pub fn practice_queue(
+    state: State<'_, AppState>,
+    subject_id: i64,
+    topic_id: Option<i64>,
+    limit: Option<i64>,
+) -> CmdResult<Vec<cards::QueueItem>> {
+    Ok(cards::practice(
+        &db(&state),
+        subject_id,
+        topic_id,
+        limit.unwrap_or(40).clamp(1, 200),
+    )?)
+}
+
+/// What each rating would do to this card's next interval, in days.
+///
+/// Shown on the buttons so a rating is an informed choice rather than a guess
+/// about what the algorithm will make of it.
+#[tauri::command]
+pub fn rating_previews(state: State<'_, AppState>, card_id: i64) -> CmdResult<RatingPreview> {
+    let conn = db(&state);
+    let previews = cards::preview(&conn, card_id, chrono::Utc::now())?;
+
+    let day = |want: crate::scheduler::Rating| {
+        previews.iter().find(|(r, _)| *r == want).and_then(|(_, d)| *d)
+    };
+
+    Ok(RatingPreview {
+        again: day(crate::scheduler::Rating::Again),
+        hard: day(crate::scheduler::Rating::Hard),
+        good: day(crate::scheduler::Rating::Good),
+        easy: day(crate::scheduler::Rating::Easy),
+    })
+}
+
+/// Days until the card would next be due, per rating.
+///
+/// `None` means the card stays inside today's learning steps — it comes back in
+/// minutes, not days, and printing "0 days" for that would read as an error.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RatingPreview {
+    pub again: Option<i64>,
+    pub hard: Option<i64>,
+    pub good: Option<i64>,
+    pub easy: Option<i64>,
 }

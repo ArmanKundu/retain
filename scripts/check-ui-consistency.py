@@ -14,10 +14,13 @@ SRC = ROOT / "src"
 
 ALLOWED_RADII = {
     "rounded-full",
+    "rounded-[var(--r-xs)]",
     "rounded-[var(--r-sm)]",
     "rounded-[var(--r-md)]",
     "rounded-[var(--r-lg)]",
     "rounded-[var(--r-xl)]",
+    # The one-offs below predate --r-xs and are the same idea as it: marks
+    # smaller than the smallest control. Worth folding into the token.
     "rounded-[3px]",    # 16px attachment thumbnails
     "rounded-[6px]",    # inline code
     "rounded-[7px]",    # checkboxes, genuinely smaller than the smallest token

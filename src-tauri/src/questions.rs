@@ -1,0 +1,389 @@
+//! Finding one question in a thousand papers.
+//!
+//! The library holds over a thousand exams. Searching it returns *papers*, and
+//! a paper is twenty pages — which means "show me every calculus question in
+//! Specialist" was answerable only by opening PDFs until you found some.
+//!
+//! # How a paper is cut up
+//!
+//! On a line of its own, `Question 3`. That is the marker, and it was chosen by
+//! looking rather than guessing: of the 1,041 exam resources in the real
+//! library, 942 contain it. The alternative — a bare `3.` at the start of a
+//! line — is far more common in the text and almost never a question, because
+//! every multiple-choice answer grid, every page number and every reference
+//! list produces one.
+//!
+//! Everything before the first marker is front matter: the publisher's address,
+//! the instructions, the "you may not bring a calculator". It is dropped.
+//!
+//! # What this deliberately does not do
+//!
+//! It does not read the *answers*. A question and its worked solution live in
+//! separate documents most of the time, and pairing them by guessing would
+//! produce confident wrong pairings. The question is what you search for; the
+//! document it came from is one click away.
+
+use anyhow::Result;
+use rusqlite::Connection;
+use serde::Serialize;
+
+/// Below this a "question" is a heading, a page artefact, or a stray line.
+const MIN_WORDS: usize = 4;
+
+/// Above this the segmentation has gone wrong — a marker was missed and two or
+/// more questions have run together, or the whole paper landed in one span.
+/// Better to keep it than drop it, but it is worth capping what gets stored.
+const MAX_CHARS: usize = 4_000;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Parsed {
+    pub label: String,
+    pub number: i64,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Question {
+    pub id: i64,
+    pub resource_id: i64,
+    pub resource_title: String,
+    pub subject_id: Option<i64>,
+    pub subject_name: Option<String>,
+    pub label: String,
+    pub words: i64,
+    pub text: String,
+    pub tags: Vec<String>,
+}
+
+/// Whether a line is a question marker, and which number it carries.
+///
+/// Requires the line to be *only* the marker. "Question 3" alone starts a
+/// question; "…as shown in Question 3 above" is a cross-reference inside one,
+/// and treating it as a boundary would split a question in half.
+fn marker(line: &str) -> Option<(String, i64)> {
+    let t = line.trim();
+    let rest = t.strip_prefix("Question ").or_else(|| t.strip_prefix("QUESTION "))?;
+
+    // Trailing punctuation and marks in brackets are part of the label, not the
+    // number: "Question 12 (4 marks)" is still question 12.
+    let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+    if digits.is_empty() {
+        return None;
+    }
+
+    let after = rest[digits.len()..].trim();
+    let is_label_only = after.is_empty()
+        || after.starts_with('(')
+        || after.starts_with('.')
+        || after.starts_with('–')
+        || after.starts_with('-')
+        || after.starts_with("marks");
+    if !is_label_only {
+        return None;
+    }
+
+    let number: i64 = digits.parse().ok()?;
+    // Papers don't have a question 300; a match that big is a page reference or
+    // a year that happened to follow the word.
+    if !(1..=200).contains(&number) {
+        return None;
+    }
+
+    Some((t.to_string(), number))
+}
+
+/// Split a paper into its questions.
+pub fn segment(content: &str) -> Vec<Parsed> {
+    let mut out: Vec<Parsed> = Vec::new();
+    let mut current: Option<(String, i64, Vec<&str>)> = None;
+
+    for line in content.lines() {
+        if let Some((label, number)) = marker(line) {
+            if let Some((l, n, body)) = current.take() {
+                push(&mut out, l, n, &body);
+            }
+            current = Some((label, number, Vec::new()));
+            continue;
+        }
+        // Lines before the first marker are the publisher's front matter.
+        if let Some((_, _, body)) = current.as_mut() {
+            body.push(line);
+        }
+    }
+
+    if let Some((l, n, body)) = current {
+        push(&mut out, l, n, &body);
+    }
+    out
+}
+
+fn push(out: &mut Vec<Parsed>, label: String, number: i64, body: &[&str]) {
+    let text = body.join("\n").trim().to_string();
+    if text.split_whitespace().count() < MIN_WORDS {
+        return;
+    }
+
+    let text = if text.chars().count() > MAX_CHARS {
+        text.chars().take(MAX_CHARS).collect()
+    } else {
+        text
+    };
+
+    out.push(Parsed { label, number, text });
+}
+
+/// Which of the student's own topic names appear in a question.
+///
+/// The only automatic tagging done, and deliberately so: a built-in keyword
+/// list would mean Retain deciding what counts as a topic in VCE Biology, which
+/// is inventing curriculum. Topic names are the student's own words, or come
+/// from a study design they uploaded, so a match is grounded in something real.
+///
+/// Matched case-insensitively on word boundaries, so a topic called "Cell"
+/// doesn't tag every question containing "excellent".
+///
+/// Singular and plural are treated as the same word. A topic named "Enzymes"
+/// has to match "an enzyme lowers activation energy" or automatic tagging is
+/// useless — that is how the topic list is actually written, and the first
+/// version of this matched literally and tagged nothing at all.
+pub fn auto_tags(text: &str, topics: &[String]) -> Vec<String> {
+    let haystack = text.to_lowercase();
+
+    topics
+        .iter()
+        .filter(|topic| {
+            let stem = singular(&topic.trim().to_lowercase());
+            // Two letters would match half the paper.
+            stem.len() >= 3 && contains_word(&haystack, &stem)
+        })
+        .cloned()
+        .collect()
+}
+
+/// Drop a plural ending, so "enzymes" and "enzyme" are the same needle.
+///
+/// Only the two endings that matter for topic names. Real stemming would also
+/// turn "mitosis" into "mitosi", which is worse than doing nothing.
+fn singular(word: &str) -> String {
+    if let Some(base) = word.strip_suffix("ies") {
+        return format!("{base}y");
+    }
+    if word.ends_with("ss") {
+        return word.to_string();
+    }
+    word.strip_suffix('s').unwrap_or(word).to_string()
+}
+
+/// Whether `stem` appears as a whole word, allowing a plural ending on it.
+fn contains_word(haystack: &str, stem: &str) -> bool {
+    haystack.match_indices(stem).any(|(at, _)| {
+        let before_ok = at == 0
+            || !haystack[..at]
+                .chars()
+                .next_back()
+                .is_some_and(|c| c.is_alphanumeric());
+        if !before_ok {
+            return false;
+        }
+
+        // What follows may end the word, or be the plural of it.
+        let after = &haystack[at + stem.len()..];
+        let rest = after
+            .strip_prefix("es")
+            .or_else(|| after.strip_prefix('s'))
+            .unwrap_or(after);
+        !rest.chars().next().is_some_and(|c| c.is_alphanumeric())
+    })
+}
+
+/// Index one resource, replacing anything already stored for it.
+///
+/// Re-runnable: indexing twice leaves the same questions rather than two copies,
+/// which matters because the button that triggers it is easy to press twice.
+pub fn index_resource(conn: &mut Connection, resource_id: i64) -> Result<usize> {
+    let (subject_id, content, kind): (Option<i64>, String, String) = conn.query_row(
+        "SELECT subject_id, content, kind FROM resources WHERE id = ?1",
+        [resource_id],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+    )?;
+
+    // Only exam-shaped material. Segmenting a study design on the word
+    // "Question" produces nonsense with a question number attached to it.
+    if !matches!(kind.as_str(), "past_paper" | "trial_test" | "exam_solution") {
+        return Ok(0);
+    }
+
+    let topics: Vec<String> = match subject_id {
+        Some(sid) => {
+            let mut stmt = conn.prepare("SELECT name FROM topics WHERE subject_id = ?1")?;
+            let rows = stmt.query_map([sid], |r| r.get(0))?.collect::<Result<Vec<_>, _>>()?;
+            rows
+        }
+        None => Vec::new(),
+    };
+
+    let parsed = segment(&content);
+
+    let tx = conn.transaction()?;
+    // Cascades to tags and, through the trigger, out of the FTS index.
+    tx.execute("DELETE FROM questions WHERE resource_id = ?1", [resource_id])?;
+
+    {
+        let mut insert = tx.prepare(
+            "INSERT INTO questions (resource_id, subject_id, label, number, ordinal, text, words)
+             VALUES (?1,?2,?3,?4,?5,?6,?7)",
+        )?;
+        let mut tag = tx.prepare(
+            "INSERT OR IGNORE INTO question_tags (question_id, tag, source) VALUES (?1,?2,'auto')",
+        )?;
+
+        for (i, q) in parsed.iter().enumerate() {
+            insert.execute(rusqlite::params![
+                resource_id,
+                subject_id,
+                q.label,
+                q.number,
+                i as i64,
+                q.text,
+                q.text.split_whitespace().count() as i64,
+            ])?;
+            let id = tx.last_insert_rowid();
+
+            for t in auto_tags(&q.text, &topics) {
+                tag.execute(rusqlite::params![id, t])?;
+            }
+        }
+    }
+
+    tx.commit()?;
+    Ok(parsed.len())
+}
+
+/// How many exam resources still have no questions indexed.
+pub fn unindexed(conn: &Connection) -> Result<Vec<i64>> {
+    let mut stmt = conn.prepare(
+        "SELECT r.id FROM resources r
+          WHERE r.kind IN ('past_paper','trial_test','exam_solution')
+            AND NOT EXISTS (SELECT 1 FROM questions q WHERE q.resource_id = r.id)
+          ORDER BY r.id",
+    )?;
+    let rows = stmt.query_map([], |r| r.get(0))?.collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+const SELECT: &str = "SELECT q.id, q.resource_id, r.title, q.subject_id, s.name, q.label,
+                             q.words, q.text
+                        FROM questions q
+                        JOIN resources r ON r.id = q.resource_id
+                        LEFT JOIN subjects s ON s.id = q.subject_id";
+
+fn row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Question> {
+    Ok(Question {
+        id: r.get(0)?,
+        resource_id: r.get(1)?,
+        resource_title: r.get(2)?,
+        subject_id: r.get(3)?,
+        subject_name: r.get(4)?,
+        label: r.get(5)?,
+        words: r.get(6)?,
+        text: r.get(7)?,
+        tags: Vec::new(),
+    })
+}
+
+/// Search. Empty query with a tag filter lists that tag.
+pub fn search(
+    conn: &Connection,
+    query: &str,
+    subject_id: Option<i64>,
+    tag: Option<&str>,
+    limit: i64,
+) -> Result<Vec<Question>> {
+    let terms = crate::resources::to_match_query(query);
+
+    let mut sql = String::from(SELECT);
+    let mut binds: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+    if terms.is_some() {
+        sql.push_str(" JOIN questions_fts f ON f.rowid = q.id");
+    }
+    if tag.is_some() {
+        sql.push_str(" JOIN question_tags t ON t.question_id = q.id");
+    }
+    sql.push_str(" WHERE 1 = 1");
+
+    if let Some(t) = terms.as_deref() {
+        sql.push_str(" AND questions_fts MATCH ?");
+        binds.push(Box::new(t.to_string()));
+    }
+    if let Some(t) = tag {
+        sql.push_str(" AND t.tag = ?");
+        binds.push(Box::new(t.to_string()));
+    }
+    if let Some(s) = subject_id {
+        sql.push_str(" AND q.subject_id = ?");
+        binds.push(Box::new(s));
+    }
+
+    // Relevance when there's a query, newest-paper-first when there isn't —
+    // ordering by bm25 without a MATCH is an error, not just meaningless.
+    sql.push_str(if terms.is_some() {
+        " ORDER BY bm25(questions_fts) LIMIT ?"
+    } else {
+        " ORDER BY q.resource_id DESC, q.ordinal LIMIT ?"
+    });
+    binds.push(Box::new(limit));
+
+    let mut stmt = conn.prepare(&sql)?;
+    let params: Vec<&dyn rusqlite::ToSql> = binds.iter().map(|b| b.as_ref()).collect();
+    let mut found: Vec<Question> =
+        stmt.query_map(params.as_slice(), row)?.collect::<Result<Vec<_>, _>>()?;
+
+    // Tags in a second pass. One query per question would be a hundred queries
+    // for a screen of results.
+    for q in &mut found {
+        let mut tags = conn.prepare("SELECT tag FROM question_tags WHERE question_id = ?1 ORDER BY tag")?;
+        q.tags = tags.query_map([q.id], |r| r.get(0))?.collect::<Result<Vec<_>, _>>()?;
+    }
+
+    Ok(found)
+}
+
+/// Every tag in use, most-used first.
+pub fn all_tags(conn: &Connection, subject_id: Option<i64>) -> Result<Vec<(String, i64)>> {
+    let mut stmt = conn.prepare(
+        "SELECT t.tag, COUNT(*) FROM question_tags t
+           JOIN questions q ON q.id = t.question_id
+          WHERE (?1 IS NULL OR q.subject_id = ?1)
+          GROUP BY t.tag ORDER BY COUNT(*) DESC, t.tag LIMIT 60",
+    )?;
+    let rows = stmt
+        .query_map([subject_id], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+pub fn add_tag(conn: &Connection, question_id: i64, tag: &str) -> Result<()> {
+    let clean = tag.trim().to_lowercase();
+    if clean.is_empty() {
+        return Ok(());
+    }
+    conn.execute(
+        "INSERT OR REPLACE INTO question_tags (question_id, tag, source) VALUES (?1, ?2, 'manual')",
+        rusqlite::params![question_id, clean],
+    )?;
+    Ok(())
+}
+
+pub fn remove_tag(conn: &Connection, question_id: i64, tag: &str) -> Result<()> {
+    conn.execute(
+        "DELETE FROM question_tags WHERE question_id = ?1 AND tag = ?2",
+        rusqlite::params![question_id, tag.trim().to_lowercase()],
+    )?;
+    Ok(())
+}
+
+#[cfg(test)]
+#[path = "questions/tests.rs"]
+mod tests;

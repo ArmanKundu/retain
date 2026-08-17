@@ -596,7 +596,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
   }
 
   return (
-    <div className="print-target">
+    <div>
       <p className="selectable whitespace-pre-wrap text-[13.5px] leading-[1.7] text-[var(--ink)]">
         {message.body}
       </p>

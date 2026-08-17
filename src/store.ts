@@ -31,6 +31,7 @@ export type Route =
   | "review"
   | "errors"
   | "notes"
+  | "questions"
   | "assessments"
   | "biology"
   | "library"

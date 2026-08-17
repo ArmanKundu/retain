@@ -23,7 +23,7 @@ use crate::models::*;
 use crate::timer::{self, ActiveTimer, SharedTimer};
 use crate::tray::TrayHandles;
 use crate::scheduler;
-use crate::{ai, assessments, assistant, biology, blocks, capture, ics, ingest, library, resources, update, workspace, cards, errors, export, inbox, mastery, notes, notifications, plan, provider, screen, secrets, settings, streak, subjects, tools};
+use crate::{ai, assessments, assistant, biology, blocks, capture, ics, ingest, library, resources, update, workspace, cards, errors, export, inbox, mastery, notes, notifications, plan, provider, questions, screen, secrets, settings, streak, subjects, tools};
 
 /// Shared state, created in `lib.rs` and handed to every command.
 pub struct AppState {
@@ -2933,4 +2933,83 @@ pub fn tray_new_sticky(app: &AppHandle) {
     if let Err(e) = spawn_sticky(app, &sticky) {
         eprintln!("[retain] couldn't open the sticky: {e}");
     }
+}
+
+// ---------------------------------------------------------------------------
+// Past questions
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn search_questions(
+    state: State<'_, AppState>,
+    query: String,
+    subject_id: Option<i64>,
+    tag: Option<String>,
+    limit: Option<i64>,
+) -> CmdResult<Vec<questions::Question>> {
+    Ok(questions::search(
+        &db(&state),
+        &query,
+        subject_id,
+        tag.as_deref(),
+        limit.unwrap_or(50).clamp(1, 200),
+    )?)
+}
+
+#[tauri::command]
+pub fn question_tags(
+    state: State<'_, AppState>,
+    subject_id: Option<i64>,
+) -> CmdResult<Vec<(String, i64)>> {
+    Ok(questions::all_tags(&db(&state), subject_id)?)
+}
+
+#[tauri::command]
+pub fn tag_question(state: State<'_, AppState>, question_id: i64, tag: String) -> CmdResult<()> {
+    Ok(questions::add_tag(&db(&state), question_id, &tag)?)
+}
+
+#[tauri::command]
+pub fn untag_question(state: State<'_, AppState>, question_id: i64, tag: String) -> CmdResult<()> {
+    Ok(questions::remove_tag(&db(&state), question_id, &tag)?)
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IndexProgress {
+    pub done: i64,
+    pub remaining: i64,
+    pub questions: i64,
+}
+
+/// Cut a batch of papers into questions.
+///
+/// Batched rather than done in one pass. A thousand papers is a few seconds of
+/// parsing, and a command that holds the database lock for a few seconds freezes
+/// every other screen — so the UI calls this repeatedly and can show progress
+/// and stay responsive between batches.
+#[tauri::command]
+pub fn index_questions(state: State<'_, AppState>, batch: Option<i64>) -> CmdResult<IndexProgress> {
+    let mut conn = state.db.lock().expect("database mutex poisoned");
+
+    let pending = questions::unindexed(&conn)?;
+    let take = batch.unwrap_or(25).clamp(1, 200) as usize;
+
+    let mut done = 0i64;
+    for id in pending.iter().take(take) {
+        // One bad paper must not stop the run — with a thousand of them, the
+        // odds of every single one segmenting cleanly are not good.
+        match questions::index_resource(&mut conn, *id) {
+            Ok(_) => done += 1,
+            Err(e) => eprintln!("[retain] couldn't index resource {id}: {e}"),
+        }
+    }
+
+    let total: i64 = conn.query_row("SELECT COUNT(*) FROM questions", [], |r| r.get(0))?;
+
+    Ok(IndexProgress {
+        done,
+        remaining: (pending.len() as i64 - done).max(0),
+        questions: total,
+    })
 }

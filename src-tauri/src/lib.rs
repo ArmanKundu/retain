@@ -15,6 +15,7 @@ mod notes;
 mod notifications;
 mod plan;
 mod provider;
+mod questions;
 mod resources;
 mod ai;
 mod biology;
@@ -297,6 +298,11 @@ pub fn run() {
             commands::save_sticky_geometry,
             commands::set_sticky_colour,
             commands::get_sticky,
+            commands::search_questions,
+            commands::question_tags,
+            commands::tag_question,
+            commands::untag_question,
+            commands::index_questions,
             commands::preview_intervals,
             // Resources and the saved-output library.
             commands::list_resources,

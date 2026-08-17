@@ -90,6 +90,8 @@ import type {
   NoteSummary,
   NoteBlockKind,
   StickyNote,
+  PastQuestion,
+  IndexProgress,
 } from "./types";
 
 export const api = {
@@ -571,6 +573,29 @@ export const api = {
   ) => invoke<void>("save_sticky_geometry", { noteId, x, y, w, h }),
   setStickyColour: (noteId: number, colour: string) =>
     invoke<void>("set_sticky_colour", { noteId, colour }),
+
+  // -- past questions -------------------------------------------------------
+  searchQuestions: (
+    query: string,
+    subjectId: number | null,
+    tag: string | null,
+    limit?: number,
+  ) =>
+    invoke<PastQuestion[]>("search_questions", {
+      query,
+      subjectId,
+      tag,
+      limit: limit ?? null,
+    }),
+  questionTags: (subjectId: number | null) =>
+    invoke<[string, number][]>("question_tags", { subjectId }),
+  tagQuestion: (questionId: number, tag: string) =>
+    invoke<void>("tag_question", { questionId, tag }),
+  untagQuestion: (questionId: number, tag: string) =>
+    invoke<void>("untag_question", { questionId, tag }),
+  /** Cut a batch of papers into questions. Pass 0 to just read progress. */
+  indexQuestions: (batch: number) =>
+    invoke<IndexProgress>("index_questions", { batch }),
   conversationMarkdown: (conversationId: number) =>
     invoke<string>("conversation_markdown", { conversationId }),
 

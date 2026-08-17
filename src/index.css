@@ -521,23 +521,25 @@ textarea:focus-visible,
   margin: 18mm 22mm 18mm 18mm;
 }
 
+/* Built for paper, and only mounted for paper. See `PrintPortal`. */
+.print-only {
+  display: none;
+}
+
 @media print {
-  body * {
-    visibility: hidden;
+  /* `display: none`, not `visibility: hidden`. A hidden element keeps its full
+     height, so hiding a four-screen-tall app this way printed four pages of
+     nothing before reaching the content. */
+  body > *:not(.print-only) {
+    display: none !important;
   }
 
-  .print-target,
-  .print-target * {
-    visibility: visible;
+  .print-only {
+    display: block !important;
   }
 
-  .print-target {
-    position: absolute;
-    inset: 0 auto auto 0;
+  .print-only {
     width: 100%;
-    max-height: none !important;
-    overflow: visible !important;
-    padding: 0 !important;
 
     /* Everything to black on white. An accent colour prints grey and a dark
        surface prints as a solid block of toner. */
@@ -548,7 +550,7 @@ textarea:focus-visible,
     line-height: 1.55;
   }
 
-  .print-target * {
+  .print-only * {
     color: #000 !important;
     background: transparent !important;
     border-color: #bbb !important;
@@ -574,55 +576,55 @@ textarea:focus-visible,
     color: #444 !important;
   }
 
-  .print-target h1,
-  .print-target h2,
-  .print-target h3,
-  .print-target h4 {
+  .print-only h1,
+  .print-only h2,
+  .print-only h3,
+  .print-only h4 {
     font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
     /* A heading orphaned at the foot of a page is the classic print bug. */
     break-after: avoid;
     page-break-after: avoid;
     break-inside: avoid;
   }
-  .print-target h2 {
+  .print-only h2 {
     font-size: 13pt;
     margin: 6mm 0 2mm;
   }
-  .print-target h3 {
+  .print-only h3 {
     font-size: 11pt;
     margin: 5mm 0 1.5mm;
   }
 
-  .print-target p,
-  .print-target li {
+  .print-only p,
+  .print-only li {
     orphans: 3;
     widows: 3;
   }
-  .print-target li {
+  .print-only li {
     margin-bottom: 0.6mm;
   }
-  .print-target ul,
-  .print-target ol {
+  .print-only ul,
+  .print-only ol {
     margin: 1.5mm 0 2.5mm 5mm;
   }
 
   /* A table split across a page break loses its header and becomes unreadable,
      and comparison tables are short by nature. */
-  .print-target table {
+  .print-only table {
     width: 100%;
     border-collapse: collapse;
     break-inside: avoid;
     margin: 3mm 0;
     font-size: 9.5pt;
   }
-  .print-target th,
-  .print-target td {
+  .print-only th,
+  .print-only td {
     border: 1px solid #999 !important;
     padding: 1.5mm 2mm;
     text-align: left;
     vertical-align: top;
   }
-  .print-target th {
+  .print-only th {
     background: #eee !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
@@ -631,7 +633,7 @@ textarea:focus-visible,
 
   /* "Not in your material" markers. A rule beside them survives greyscale,
      where a background tint would not. */
-  .print-target blockquote {
+  .print-only blockquote {
     border-left: 2pt solid #000 !important;
     margin: 2.5mm 0;
     padding-left: 3mm;
@@ -639,12 +641,12 @@ textarea:focus-visible,
     break-inside: avoid;
   }
 
-  .print-target img {
+  .print-only img {
     max-width: 100%;
     break-inside: avoid;
   }
 
-  .print-target pre {
+  .print-only pre {
     white-space: pre-wrap;
     font-size: 9.5pt;
     line-height: 1.5;

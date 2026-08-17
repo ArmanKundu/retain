@@ -26,6 +26,7 @@ import {
 
 import { AiAction, AiGate, useAi } from "../components/Ai";
 import { Markdown } from "../components/Markdown";
+import { PrintHeader, PrintPortal } from "../components/PrintPortal";
 import { Chip, SectionHeader, SubjectPill } from "../components/primitives";
 import { Button, Card, Empty, cx } from "../components/ui";
 import { api } from "../lib/api";
@@ -377,22 +378,23 @@ function ItemViewer({
           </button>
         </div>
 
-        {/* `print-target` is what the print stylesheet keeps; everything else on
-            the page is hidden when printing. */}
-        <div className="print-target selectable min-h-0 flex-1 overflow-y-auto px-9 pb-8">
-          {/* Paper only. A printed page with no title is one you can't file,
-              and a stack of untitled notes is why people stop printing them. */}
-          <header className="print-header">
-            <div className="print-title">{item.title}</div>
-            <div className="print-meta">
-              {[item.subjectName, new Date(item.createdAt).toLocaleDateString()]
-                .filter(Boolean)
-                .join(" · ")}
-            </div>
-          </header>
+        {/* The printed version is built separately and lives on `<body>` —
+            this element is inside a scroll container, and a scroll container
+            clips whatever the printer would otherwise see. */}
+        <PrintPortal>
+          <PrintHeader
+            title={item.title}
+            meta={[
+              item.subjectName,
+              new Date(item.createdAt).toLocaleDateString(),
+            ]}
+          />
+          <Markdown source={item.body} />
+        </PrintPortal>
 
+        <div className="selectable min-h-0 flex-1 overflow-y-auto px-9 pb-8">
           {item.prompt && (
-            <p className="print-hide mb-6 border-l-2 border-[var(--line)] pl-3.5 text-[13px] italic leading-relaxed text-[var(--ink-faint)]">
+            <p className="mb-6 border-l-2 border-[var(--line)] pl-3.5 text-[13px] italic leading-relaxed text-[var(--ink-faint)]">
               {item.prompt}
             </p>
           )}

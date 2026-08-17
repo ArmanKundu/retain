@@ -1021,3 +1021,23 @@ export interface StickyNote {
   w: number | null;
   h: number | null;
 }
+
+/** One question, cut out of a past paper. */
+export interface PastQuestion {
+  id: number;
+  resourceId: number;
+  resourceTitle: string;
+  subjectId: number | null;
+  subjectName: string | null;
+  /** "Question 3" as printed on the paper. */
+  label: string;
+  words: number;
+  text: string;
+  tags: string[];
+}
+
+export interface IndexProgress {
+  done: number;
+  remaining: number;
+  questions: number;
+}

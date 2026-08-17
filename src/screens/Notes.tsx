@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 
 import { InlineText } from "../components/InlineText";
+import { PrintHeader, PrintPortal } from "../components/PrintPortal";
 import { SectionHeader } from "../components/primitives";
 import { Button, Card, cx } from "../components/ui";
 import { api } from "../lib/api";
@@ -417,16 +418,20 @@ function Editor({
           </div>
         </div>
 
-        <div className="print-target px-8 py-7">
-          <header className="print-header">
-            <div className="print-title">{title}</div>
-            <div className="print-meta">
-              {[note.subjectName, new Date(note.updatedAt).toLocaleDateString()]
-                .filter(Boolean)
-                .join(" · ")}
-            </div>
-          </header>
+        {/* Paper gets its own render. The editor is a column of textareas
+            inside a scroll container, and neither prints usefully. */}
+        <PrintPortal>
+          <PrintHeader
+            title={title}
+            meta={[
+              note.subjectName,
+              new Date(note.updatedAt).toLocaleDateString(),
+            ]}
+          />
+          <PrintableBlocks blocks={blocks} />
+        </PrintPortal>
 
+        <div className="px-8 py-7">
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -872,3 +877,104 @@ const KIND_STYLES: Record<string, string> = {
     "text-[14.5px] italic leading-relaxed text-[var(--ink-dim)] border-l-2 border-[var(--line)] pl-3.5",
   code: "font-mono text-[13px] leading-relaxed text-[var(--ink-dim)] bg-[var(--surface-hi)] rounded-[var(--r-sm)] px-3 py-2.5",
 };
+
+/**
+ * A note as it should appear on paper.
+ *
+ * Semantic elements rather than the editor's divs, so the print stylesheet's
+ * rules for headings, lists and page breaks actually apply — a printed `<div
+ * class="text-[22px]">` is not a heading to a printer, and it will happily
+ * orphan one at the foot of a page.
+ */
+function PrintableBlocks({ blocks }: { blocks: NoteBlock[] }) {
+  const out: React.ReactNode[] = [];
+  let list: { ordered: boolean; items: NoteBlock[] } | null = null;
+
+  const flush = () => {
+    if (!list) return;
+    const Tag = list.ordered ? "ol" : "ul";
+    out.push(
+      <Tag key={out.length}>
+        {list.items.map((b) => (
+          <li key={b.id}>
+            {b.kind === "todo" && <span>{b.checked ? "☑ " : "☐ "}</span>}
+            <InlineText source={b.text} />
+          </li>
+        ))}
+      </Tag>,
+    );
+    list = null;
+  };
+
+  for (const b of blocks) {
+    const listy =
+      b.kind === "bullet" || b.kind === "numbered" || b.kind === "todo";
+    if (listy) {
+      const ordered = b.kind === "numbered";
+      if (list && list.ordered !== ordered) flush();
+      list ??= { ordered, items: [] };
+      list.items.push(b);
+      continue;
+    }
+    flush();
+
+    switch (b.kind) {
+      case "h1":
+        out.push(
+          <h2 key={b.id}>
+            <InlineText source={b.text} />
+          </h2>,
+        );
+        break;
+      case "h2":
+        out.push(
+          <h3 key={b.id}>
+            <InlineText source={b.text} />
+          </h3>,
+        );
+        break;
+      case "h3":
+        out.push(
+          <h4 key={b.id}>
+            <InlineText source={b.text} />
+          </h4>,
+        );
+        break;
+      case "quote":
+        out.push(
+          <blockquote key={b.id}>
+            <InlineText source={b.text} />
+          </blockquote>,
+        );
+        break;
+      case "code":
+        out.push(<pre key={b.id}>{b.text}</pre>);
+        break;
+      case "divider":
+        out.push(<hr key={b.id} />);
+        break;
+      case "image":
+        out.push(
+          b.image ? (
+            <figure key={b.id}>
+              <img src={b.image} alt={b.text || "Screenshot"} />
+              {b.text && <figcaption>{b.text}</figcaption>}
+            </figure>
+          ) : null,
+        );
+        break;
+      default:
+        // An empty paragraph is spacing on screen and a wasted line on paper.
+        if (b.text.trim()) {
+          out.push(
+            <p key={b.id}>
+              <InlineText source={b.text} />
+            </p>,
+          );
+        }
+    }
+  }
+  flush();
+
+  return <>{out}</>;
+}

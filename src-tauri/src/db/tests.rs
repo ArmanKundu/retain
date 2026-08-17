@@ -134,3 +134,57 @@ fn reindex_repairs_a_real_database_copy() {
     println!("repaired {repaired} resource(s) -> {chunks} chunks, {hits} hits for \"enzyme\"");
     assert!(chunks > 0);
 }
+
+/// Cut real papers into questions and report what came out.
+///
+/// Ignored by default: needs `RETAIN_TEST_DB` pointing at a *copy*. Segmenting
+/// a thousand real papers is the only way to find out whether the marker
+/// actually holds across twenty years of different publishers.
+#[test]
+#[ignore]
+fn segmenting_real_papers_produces_sane_questions() {
+    let Ok(path) = std::env::var("RETAIN_TEST_DB") else {
+        return;
+    };
+    let mut conn = Connection::open(path).unwrap();
+    conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+    run_migrations(&conn).unwrap();
+
+    let pending = crate::questions::unindexed(&conn).unwrap();
+    println!("exam resources to index: {}", pending.len());
+
+    let mut failed = 0;
+    for id in pending.iter().take(400) {
+        if crate::questions::index_resource(&mut conn, *id).is_err() {
+            failed += 1;
+        }
+    }
+
+    let (total, papers): (i64, i64) = conn
+        .query_row(
+            "SELECT COUNT(*), COUNT(DISTINCT resource_id) FROM questions",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    let median_words: i64 = conn
+        .query_row(
+            "SELECT words FROM questions ORDER BY words LIMIT 1 OFFSET (SELECT COUNT(*)/2 FROM questions)",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+
+    println!("{total} questions from {papers} papers, {failed} errored, median {median_words} words");
+
+    let hits: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM questions_fts WHERE questions_fts MATCH 'enzyme'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    println!("questions matching \"enzyme\": {hits}");
+
+    assert!(total > 0, "no questions came out of real papers");
+}

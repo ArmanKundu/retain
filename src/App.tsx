@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import {
   BarChart3,
   BookMarked,
+  HelpCircle,
   CalendarClock,
   CalendarDays,
   ClipboardList,
@@ -29,6 +30,7 @@ import { Assistant } from "./screens/Assistant";
 import { Week } from "./screens/Week";
 import { Library } from "./screens/Library";
 import { Notes } from "./screens/Notes";
+import { Questions } from "./screens/Questions";
 import { Progress } from "./screens/Progress";
 import { Settings } from "./screens/Settings";
 import { FocusDock } from "./components/FocusDock";
@@ -75,6 +77,7 @@ const NAV_GROUPS: { heading: string; items: NavItem[] }[] = [
       { route: "assistant", label: "Assistant", Icon: MessageSquare },
       { route: "notes", label: "Notes", Icon: NotebookPen },
       { route: "library", label: "Library", Icon: BookMarked },
+      { route: "questions", label: "Past questions", Icon: HelpCircle },
     ],
   },
   {
@@ -276,6 +279,7 @@ export default function App() {
           {route === "biology" && <Biology />}
           {route === "notes" && <Notes />}
           {route === "library" && <Library />}
+          {route === "questions" && <Questions />}
           {route === "assistant" && <Assistant />}
           {route === "progress" && <Progress />}
           {route === "settings" && <Settings />}

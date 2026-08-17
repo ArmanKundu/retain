@@ -20,7 +20,11 @@ import { useApp } from "../store";
 import { FloatingDock } from "./primitives";
 import { cx } from "./ui";
 
-export function FocusDock({ onFinished }: { onFinished: (s: FinishedSession) => void }) {
+export function FocusDock({
+  onFinished,
+}: {
+  onFinished: (s: FinishedSession) => void;
+}) {
   const timer = useApp((s) => s.timer);
   const setTimer = useApp((s) => s.setTimer);
   const route = useApp((s) => s.route);
@@ -62,7 +66,10 @@ export function FocusDock({ onFinished }: { onFinished: (s: FinishedSession) => 
           {!paused && (
             <span
               className="absolute inset-0 animate-ping rounded-full opacity-60"
-              style={{ background: timer.subjectColour, animationDuration: "2.4s" }}
+              style={{
+                background: timer.subjectColour,
+                animationDuration: "2.4s",
+              }}
             />
           )}
         </span>
@@ -73,7 +80,7 @@ export function FocusDock({ onFinished }: { onFinished: (s: FinishedSession) => 
 
       <div
         className={cx(
-          "tabular text-[22px] font-medium leading-none tracking-[-0.02em] transition-opacity duration-[var(--t-base)]",
+          "tabular text-[22px] font-medium leading-none tracking-[var(--track-display)] transition-opacity duration-[var(--t-base)]",
           paused ? "text-[var(--ink-dim)] opacity-70" : "text-[var(--ink)]",
         )}
       >
@@ -95,7 +102,11 @@ export function FocusDock({ onFinished }: { onFinished: (s: FinishedSession) => 
           label={paused ? "Resume session" : "Pause session"}
           disabled={busy}
           onClick={() =>
-            void act(async () => setTimer(paused ? await api.resumeTimer() : await api.pauseTimer()))
+            void act(async () =>
+              setTimer(
+                paused ? await api.resumeTimer() : await api.pauseTimer(),
+              ),
+            )
           }
         >
           {paused ? <Play size={14} /> : <Pause size={14} />}

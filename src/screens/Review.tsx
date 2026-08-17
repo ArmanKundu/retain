@@ -252,7 +252,7 @@ export function Review({ onImport }: { onImport: () => void }) {
       {/* Header: counts and filter */}
       <header className="mb-6 flex shrink-0 items-center gap-4">
         <div className="flex items-baseline gap-3">
-          <h1 className="text-[24px] font-semibold tracking-[-0.025em]">
+          <h1 className="text-[24px] font-semibold tracking-[var(--track-display)]">
             Review
           </h1>
           {counts && (

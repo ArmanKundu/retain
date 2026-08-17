@@ -87,11 +87,13 @@ export function Notes() {
 
   return (
     <div className="mx-auto w-full max-w-[min(1180px,100%)] px-6 pb-16 sm:px-9">
-      <div className="titlebar-drag h-11" />
+      {/* Content scrolls under the title bar. macOS separates the two with a
+          hard edge rather than letting text vanish mid-letter. */}
+      <div className="titlebar-drag scroll-edge h-11" />
 
       <header className="animate-rise mb-6 flex flex-wrap items-end gap-4">
         <div>
-          <h1 className="text-[28px] font-semibold tracking-[-0.028em]">
+          <h1 className="text-[28px] font-semibold tracking-[var(--track-display)]">
             Notes
           </h1>
           <p className="mt-1.5 text-[14px] leading-relaxed text-[var(--ink-dim)]">
@@ -437,7 +439,7 @@ function Editor({
             onChange={(e) => setTitle(e.target.value)}
             onBlur={() => void api.setNoteTitle(note.id, title).then(onChanged)}
             placeholder="Untitled"
-            className="print-hide mb-5 w-full bg-transparent text-[26px] font-semibold tracking-[-0.025em] text-[var(--ink)] outline-none placeholder:text-[var(--ink-faint)]"
+            className="print-hide mb-5 w-full bg-transparent text-[26px] font-semibold tracking-[var(--track-display)] text-[var(--ink)] outline-none placeholder:text-[var(--ink-faint)]"
           />
 
           <div className="space-y-0.5">
@@ -867,8 +869,8 @@ function numberOf(blocks: NoteBlock[], index: number): number {
 
 const KIND_STYLES: Record<string, string> = {
   paragraph: "text-[14.5px] leading-relaxed text-[var(--ink)]",
-  h1: "text-[22px] font-semibold tracking-[-0.02em] text-[var(--ink)] pt-3",
-  h2: "text-[18px] font-semibold tracking-[-0.015em] text-[var(--ink)] pt-2.5",
+  h1: "text-[22px] font-semibold tracking-[var(--track-display)] text-[var(--ink)] pt-3",
+  h2: "text-[18px] font-semibold tracking-[var(--track-display)] text-[var(--ink)] pt-2.5",
   h3: "text-[15.5px] font-semibold text-[var(--ink)] pt-2",
   bullet: "text-[14.5px] leading-relaxed text-[var(--ink)]",
   numbered: "text-[14.5px] leading-relaxed text-[var(--ink)]",

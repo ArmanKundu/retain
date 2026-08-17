@@ -23,7 +23,13 @@ function longDate(iso: string): string {
   });
 }
 
-export function DayDetailSheet({ date, onClose }: { date: string; onClose: () => void }) {
+export function DayDetailSheet({
+  date,
+  onClose,
+}: {
+  date: string;
+  onClose: () => void;
+}) {
   const [detail, setDetail] = useState<DayDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,7 +54,9 @@ export function DayDetailSheet({ date, onClose }: { date: string; onClose: () =>
       >
         <div className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
-            <h2 className="text-[20px] font-semibold tracking-[-0.02em]">{longDate(date)}</h2>
+            <h2 className="text-[20px] font-semibold tracking-[var(--track-display)]">
+              {longDate(date)}
+            </h2>
             {detail && (
               <p className="mt-1 text-[13px] text-[var(--ink-dim)]">
                 {detail.totalMinutes === 0
@@ -68,7 +76,9 @@ export function DayDetailSheet({ date, onClose }: { date: string; onClose: () =>
           </button>
         </div>
 
-        {error && <p className="mt-4 text-[12.5px] text-[var(--danger)]">{error}</p>}
+        {error && (
+          <p className="mt-4 text-[12.5px] text-[var(--danger)]">{error}</p>
+        )}
 
         {detail && detail.bySubject.length > 0 && (
           <div className="mt-6 space-y-2.5">
@@ -117,7 +127,8 @@ export function DayDetailSheet({ date, onClose }: { date: string; onClose: () =>
 
         {detail && detail.bySubject.length === 0 && (
           <p className="mt-6 text-[13px] leading-relaxed text-[var(--ink-faint)]">
-            A quiet day. Rest days and freezes exist so this doesn't have to mean anything.
+            A quiet day. Rest days and freezes exist so this doesn't have to
+            mean anything.
           </p>
         )}
       </div>

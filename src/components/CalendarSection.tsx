@@ -88,7 +88,11 @@ export function CalendarSection() {
           />
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Button size="sm" disabled={!dirty} onClick={() => void save(status.enabled, url)}>
+            <Button
+              size="sm"
+              disabled={!dirty}
+              onClick={() => void save(status.enabled, url)}
+            >
               {dirty ? "Save address" : "Saved"}
             </Button>
 
@@ -98,7 +102,10 @@ export function CalendarSection() {
               disabled={busy || !status.url || !status.enabled}
               onClick={() => void sync()}
             >
-              <RefreshCw size={13} className={busy ? "animate-spin" : undefined} />
+              <RefreshCw
+                size={13}
+                className={busy ? "animate-spin" : undefined}
+              />
               {busy ? "Syncing…" : "Sync now"}
             </Button>
 
@@ -131,9 +138,15 @@ export function CalendarSection() {
         <div className="mt-4 space-y-2 border-t border-[var(--line-soft)] pt-4">
           <div className="flex items-center gap-2 text-[12.5px] text-[var(--ink-dim)]">
             {status.lastError ? (
-              <AlertTriangle size={13} className="shrink-0 text-[var(--warn)]" />
+              <AlertTriangle
+                size={13}
+                className="shrink-0 text-[var(--warn)]"
+              />
             ) : status.lastSyncAt ? (
-              <Check size={13} className="shrink-0 text-[var(--color-positive)]" />
+              <Check
+                size={13}
+                className="shrink-0 text-[var(--color-positive)]"
+              />
             ) : null}
             <span>
               Last sync: {whenSynced(status.lastSyncAt)} · {status.eventCount}{" "}
@@ -145,20 +158,24 @@ export function CalendarSection() {
             <p className="text-[12.5px] leading-relaxed text-[var(--warn)]">
               {status.lastError}
               <span className="mt-1 block text-[var(--ink-faint)]">
-                Events from the last successful sync are still here — nothing was lost.
+                Events from the last successful sync are still here — nothing
+                was lost.
               </span>
             </p>
           )}
 
           {saveError && (
-            <p className="text-[12.5px] leading-relaxed text-[var(--danger)]">{saveError}</p>
+            <p className="text-[12.5px] leading-relaxed text-[var(--danger)]">
+              {saveError}
+            </p>
           )}
 
           <p className="text-[12px] leading-relaxed text-[var(--ink-faint)]">
-            Syncing replaces the stored events with whatever the feed currently says, so a
-            cancelled class disappears rather than lingering. Recurring events are expanded about
-            a year ahead in their own timezone, which is what keeps a 9am class at 9am across
-            daylight saving.
+            Syncing replaces the stored events with whatever the feed currently
+            says, so a cancelled class disappears rather than lingering.
+            Recurring events are expanded about a year ahead in their own
+            timezone, which is what keeps a 9am class at 9am across daylight
+            saving.
           </p>
         </div>
       </Card>

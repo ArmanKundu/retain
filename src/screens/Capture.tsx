@@ -333,7 +333,7 @@ export function Capture() {
             spellCheck={false}
             autoComplete="off"
             aria-label={MODES.find((m) => m.value === mode)?.label}
-            className="min-w-0 flex-1 bg-transparent text-[21px] leading-[1.3] tracking-[-0.015em] text-[var(--ink)] outline-none placeholder:text-[var(--ink-faint)]"
+            className="min-w-0 flex-1 bg-transparent text-[21px] leading-[1.3] tracking-[var(--track-display)] text-[var(--ink)] outline-none placeholder:text-[var(--ink-faint)]"
           />
 
           {mode === "capture" && (

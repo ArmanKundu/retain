@@ -2,7 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 import { CalendarDays, Plus, Trash2 } from "lucide-react";
 
 import { AiAction, AiGate, useAi } from "../components/Ai";
-import { Button, Card, ColourDot, Empty, SectionTitle, cx } from "../components/ui";
+import {
+  Button,
+  Card,
+  ColourDot,
+  Empty,
+  SectionTitle,
+  cx,
+} from "../components/ui";
 import { api } from "../lib/api";
 import { prettyDate } from "../lib/format";
 import type {
@@ -68,16 +75,24 @@ export function Assessments() {
 
   return (
     <div className="mx-auto w-full max-w-[min(920px,100%)] px-6 sm:px-9 pb-14">
-      <div className="titlebar-drag h-11" />
+      {/* Content scrolls under the title bar. macOS separates the two with a
+          hard edge rather than letting text vanish mid-letter. */}
+      <div className="titlebar-drag scroll-edge h-11" />
 
       <header className="mb-6 flex items-center">
         <div>
-          <h1 className="text-[24px] font-semibold tracking-[-0.025em]">Assessments</h1>
+          <h1 className="text-[24px] font-semibold tracking-[var(--track-display)]">
+            Assessments
+          </h1>
           <p className="mt-1 text-[13.5px] text-[var(--ink-dim)]">
             Countdowns, and what's worth revising right now.
           </p>
         </div>
-        <Button variant="primary" className="ml-auto" onClick={() => setAdding(true)}>
+        <Button
+          variant="primary"
+          className="ml-auto"
+          onClick={() => setAdding(true)}
+        >
           <Plus size={15} />
           Add
         </Button>
@@ -120,16 +135,19 @@ export function Assessments() {
                   <div className="flex items-center gap-3">
                     <ColourDot colour={a.colour} size={9} />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-[14px] text-[var(--ink)]">{a.name}</div>
+                      <div className="truncate text-[14px] text-[var(--ink)]">
+                        {a.name}
+                      </div>
                       <div className="text-[12px] text-[var(--ink-faint)]">
-                        {a.subjectName} · {a.kind.toUpperCase()} · {prettyDate(a.dueOn)}
+                        {a.subjectName} · {a.kind.toUpperCase()} ·{" "}
+                        {prettyDate(a.dueOn)}
                         {a.source === "compass" && " · from Compass"}
                       </div>
                     </div>
                     <div className="text-right">
                       <div
                         className={cx(
-                          "tabular text-[26px] font-medium leading-none tracking-[-0.03em]",
+                          "tabular text-[26px] font-medium leading-none tracking-[var(--track-display)]",
                           c.urgent ? "text-[var(--warn)]" : "text-[var(--ink)]",
                         )}
                         style={
@@ -175,8 +193,9 @@ export function Assessments() {
                         ))}
                       </div>
                       <p className="mt-2 text-[11.5px] leading-relaxed text-[var(--ink-faint)]">
-                        These are when, not what. What to revise comes from the ranking below on the
-                        day — nothing is pre-assigned, so missing one costs nothing.
+                        These are when, not what. What to revise comes from the
+                        ranking below on the day — nothing is pre-assigned, so
+                        missing one costs nothing.
                       </p>
                     </div>
                   )}
@@ -279,7 +298,10 @@ function PracticeQuestion({
   // whole thing rather than hiding something the user paid for.
   const split = output?.body.split(/^MODEL ANSWER\s*$/m);
   const question = split?.[0]?.replace(/^QUESTION\s*$/m, "").trim();
-  const rest = split && split.length > 1 ? split.slice(1).join("\nMODEL ANSWER\n").trim() : null;
+  const rest =
+    split && split.length > 1
+      ? split.slice(1).join("\nMODEL ANSWER\n").trim()
+      : null;
 
   return (
     <section className="animate-in mt-7">
@@ -365,8 +387,9 @@ function PracticeQuestion({
               )}
 
               <p className="mt-4 text-[11.5px] leading-relaxed text-[var(--ink-faint)]">
-                Generated practice, not a VCAA question. It hasn't been checked against the study
-                design — treat the rubric as a guide, not a mark scheme.
+                Generated practice, not a VCAA question. It hasn't been checked
+                against the study design — treat the rubric as a guide, not a
+                mark scheme.
               </p>
             </div>
           )}
@@ -376,7 +399,13 @@ function PracticeQuestion({
   );
 }
 
-function TopicRowView({ topic, onLogged }: { topic: TopicStatus; onLogged: () => Promise<void> }) {
+function TopicRowView({
+  topic,
+  onLogged,
+}: {
+  topic: TopicStatus;
+  onLogged: () => Promise<void>;
+}) {
   const [busy, setBusy] = useState(false);
 
   const log = async (confidence: number) => {
@@ -393,7 +422,9 @@ function TopicRowView({ topic, onLogged }: { topic: TopicStatus; onLogged: () =>
     <div className="flex flex-wrap items-center gap-3 px-5 py-3">
       <ColourDot colour={topic.colour} size={8} />
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[13.5px] text-[var(--ink)]">{topic.topicName}</div>
+        <div className="truncate text-[13.5px] text-[var(--ink)]">
+          {topic.topicName}
+        </div>
         <div className="text-[11.5px] text-[var(--ink-faint)]">
           {topic.subjectName}
           {topic.daysSince === null ? (
@@ -402,7 +433,8 @@ function TopicRowView({ topic, onLogged }: { topic: TopicStatus; onLogged: () =>
             <>
               {" · "}
               {topic.daysSince === 0 ? "today" : `${topic.daysSince}d ago`}
-              {topic.lastConfidence !== null && ` · felt ${topic.lastConfidence}/5`}
+              {topic.lastConfidence !== null &&
+                ` · felt ${topic.lastConfidence}/5`}
             </>
           )}
         </div>
@@ -482,8 +514,8 @@ function TopicManager({
           </div>
 
           <p className="mt-2 text-[11.5px] leading-relaxed text-[var(--ink-faint)]">
-            Topics you add by hand. The VCAA Biology tree will populate these automatically once
-            it's built.
+            Topics you add by hand. The VCAA Biology tree will populate these
+            automatically once it's built.
           </p>
 
           {topics.length > 0 && (
@@ -605,7 +637,9 @@ function AddForm({
                 key={t.id}
                 onClick={() =>
                   setTopicIds((prev) =>
-                    prev.includes(t.id) ? prev.filter((x) => x !== t.id) : [...prev, t.id],
+                    prev.includes(t.id)
+                      ? prev.filter((x) => x !== t.id)
+                      : [...prev, t.id],
                   )
                 }
                 className={cx(
@@ -622,13 +656,19 @@ function AddForm({
         </div>
       )}
 
-      {error && <div className="mt-3 text-[12.5px] text-[var(--danger)]">{error}</div>}
+      {error && (
+        <div className="mt-3 text-[12.5px] text-[var(--danger)]">{error}</div>
+      )}
 
       <div className="mt-4 flex justify-end gap-2">
         <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>
-        <Button variant="primary" disabled={!name.trim() || !dueOn} onClick={save}>
+        <Button
+          variant="primary"
+          disabled={!name.trim() || !dueOn}
+          onClick={save}
+        >
           Add assessment
         </Button>
       </div>

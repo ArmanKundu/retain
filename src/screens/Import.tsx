@@ -2,7 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Check, X } from "lucide-react";
 
 import { AiAction, AiGate, useAi } from "../components/Ai";
-import { Button, Card, ColourDot, Segmented, SectionTitle, cx } from "../components/ui";
+import {
+  Button,
+  Card,
+  ColourDot,
+  Segmented,
+  SectionTitle,
+  cx,
+} from "../components/ui";
 import { api } from "../lib/api";
 import type { Delimiter, ImportPreview, ImportResult } from "../lib/types";
 import { useApp } from "../store";
@@ -41,7 +48,9 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
   const subjects = useApp((s) => s.subjects);
   const setRoute = useApp((s) => s.setRoute);
 
-  const [subjectId, setSubjectId] = useState<number | null>(subjects[0]?.id ?? null);
+  const [subjectId, setSubjectId] = useState<number | null>(
+    subjects[0]?.id ?? null,
+  );
   const [quoteMode, setQuoteMode] = useState(false);
   const [delimiter, setDelimiter] = useState<Delimiter | "auto">("auto");
   const [text, setText] = useState("");
@@ -67,7 +76,11 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
     }
     const t = setTimeout(() => {
       api
-        .previewCardImport(text, delimiter === "auto" ? null : delimiter, quoteMode)
+        .previewCardImport(
+          text,
+          delimiter === "auto" ? null : delimiter,
+          quoteMode,
+        )
         .then(setPreview)
         .catch((e) => setError(String(e)));
     }, 180);
@@ -105,13 +118,18 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
 
   return (
     <div className="mx-auto w-full max-w-[min(920px,100%)] px-6 sm:px-9 pb-14">
-      <div className="titlebar-drag h-11" />
+      {/* Content scrolls under the title bar. macOS separates the two with a
+          hard edge rather than letting text vanish mid-letter. */}
+      <div className="titlebar-drag scroll-edge h-11" />
 
       <header className="mb-6 flex items-center">
         <div>
-          <h1 className="text-[24px] font-semibold tracking-[-0.025em]">Add cards</h1>
+          <h1 className="text-[24px] font-semibold tracking-[var(--track-display)]">
+            Add cards
+          </h1>
           <p className="mt-1 text-[13.5px] text-[var(--ink-dim)]">
-            Paste in Anki's text format. Nothing is saved until you've seen the preview.
+            Paste in Anki's text format. Nothing is saved until you've seen the
+            preview.
           </p>
         </div>
         <Button variant="ghost" className="ml-auto" onClick={onDone}>
@@ -190,7 +208,9 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
       {!quoteMode && (
         <NotesToCards
           subjectId={subjectId}
-          onGenerated={(tsv) => setText((t) => (t.trim() ? `${t.trim()}\n${tsv}` : tsv))}
+          onGenerated={(tsv) =>
+            setText((t) => (t.trim() ? `${t.trim()}\n${tsv}` : tsv))
+          }
           onOpenSettings={() => setRoute("settings")}
         />
       )}
@@ -207,19 +227,30 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
 
           <div className="mt-3 flex flex-wrap gap-4 text-[13px]">
             <span className="text-[var(--ink)]">
-              <span className="tabular font-medium">{preview.cards.length}</span> cards
+              <span className="tabular font-medium">
+                {preview.cards.length}
+              </span>{" "}
+              cards
             </span>
             {breakdown && breakdown.basic > 0 && (
-              <span className="text-[var(--ink-dim)]">{breakdown.basic} basic</span>
+              <span className="text-[var(--ink-dim)]">
+                {breakdown.basic} basic
+              </span>
             )}
             {breakdown && breakdown.cloze > 0 && (
-              <span className="text-[var(--ink-dim)]">{breakdown.cloze} cloze</span>
+              <span className="text-[var(--ink-dim)]">
+                {breakdown.cloze} cloze
+              </span>
             )}
             {breakdown && breakdown.quote > 0 && (
-              <span className="text-[var(--ink-dim)]">{breakdown.quote} quote</span>
+              <span className="text-[var(--ink-dim)]">
+                {breakdown.quote} quote
+              </span>
             )}
             {preview.skipped.length > 0 && (
-              <span className="text-[var(--warn)]">{preview.skipped.length} skipped</span>
+              <span className="text-[var(--warn)]">
+                {preview.skipped.length} skipped
+              </span>
             )}
           </div>
 
@@ -233,12 +264,22 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
                   <div className="selectable truncate text-[13px] text-[var(--ink)]">
                     {c.front}
                     {c.clozeIndex !== null && (
-                      <span className="ml-2 text-[11px] text-[var(--accent)]">c{c.clozeIndex}</span>
+                      <span className="ml-2 text-[11px] text-[var(--accent)]">
+                        c{c.clozeIndex}
+                      </span>
                     )}
                   </div>
                   <div className="selectable mt-0.5 truncate text-[12px] text-[var(--ink-dim)]">
-                    {c.back || <span className="italic text-[var(--ink-faint)]">no back</span>}
-                    {c.extra && <span className="ml-2 text-[var(--ink-faint)]">· {c.extra}</span>}
+                    {c.back || (
+                      <span className="italic text-[var(--ink-faint)]">
+                        no back
+                      </span>
+                    )}
+                    {c.extra && (
+                      <span className="ml-2 text-[var(--ink-faint)]">
+                        · {c.extra}
+                      </span>
+                    )}
                   </div>
                 </div>
               ))}
@@ -259,8 +300,13 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
               </div>
               <div className="mt-2 max-h-36 space-y-1.5 overflow-y-auto">
                 {preview.skipped.map((s) => (
-                  <div key={s.lineNumber} className="text-[12px] leading-relaxed">
-                    <span className="tabular text-[var(--ink-faint)]">line {s.lineNumber}</span>
+                  <div
+                    key={s.lineNumber}
+                    className="text-[12px] leading-relaxed"
+                  >
+                    <span className="tabular text-[var(--ink-faint)]">
+                      line {s.lineNumber}
+                    </span>
                     <span className="selectable ml-2 text-[var(--ink-dim)]">
                       {s.text.slice(0, 60)}
                       {s.text.length > 60 && "…"}
@@ -305,7 +351,9 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
         size="lg"
         variant="primary"
         className="mt-5 w-full"
-        disabled={busy || subjectId == null || !preview || preview.cards.length === 0}
+        disabled={
+          busy || subjectId == null || !preview || preview.cards.length === 0
+        }
         onClick={commit}
       >
         {busy
@@ -360,7 +408,9 @@ function NotesToCards({
           />
 
           <div className="mt-3 flex items-center gap-3">
-            <label className="text-[12.5px] text-[var(--ink-dim)]">At most</label>
+            <label className="text-[12.5px] text-[var(--ink-dim)]">
+              At most
+            </label>
             <input
               type="number"
               min={1}
@@ -379,7 +429,10 @@ function NotesToCards({
               onDone={(cards) => {
                 onGenerated(
                   cards
-                    .map((c) => `${c.front.replace(/\t/g, " ")}\t${c.back.replace(/\t/g, " ")}`)
+                    .map(
+                      (c) =>
+                        `${c.front.replace(/\t/g, " ")}\t${c.back.replace(/\t/g, " ")}`,
+                    )
                     .join("\n"),
                 );
                 setNotes("");
@@ -388,8 +441,9 @@ function NotesToCards({
           </div>
 
           <p className="mt-3 text-[12px] leading-relaxed text-[var(--ink-faint)]">
-            Cards are added to the box above for you to read, edit and confirm — nothing goes
-            into your deck until you press Import. Expect to delete a few; that's the job.
+            Cards are added to the box above for you to read, edit and confirm —
+            nothing goes into your deck until you press Import. Expect to delete
+            a few; that's the job.
           </p>
         </AiGate>
       </div>

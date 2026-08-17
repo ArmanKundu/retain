@@ -19,13 +19,20 @@ function hm(minutes: number): string {
   return h ? `${h}h ${m}m` : `${m}m`;
 }
 
-export function WeeklyReview({ onOpenSettings }: { onOpenSettings: () => void }) {
+export function WeeklyReview({
+  onOpenSettings,
+}: {
+  onOpenSettings: () => void;
+}) {
   const { status } = useAi();
   const [facts, setFacts] = useState<WeeklyFacts | null>(null);
   const [prose, setProse] = useState<string | null>(null);
 
   useEffect(() => {
-    void api.weeklyFacts().then(setFacts).catch(() => setFacts(null));
+    void api
+      .weeklyFacts()
+      .then(setFacts)
+      .catch(() => setFacts(null));
   }, []);
 
   if (!facts) return null;
@@ -70,30 +77,40 @@ export function WeeklyReview({ onOpenSettings }: { onOpenSettings: () => void })
         {facts.untouched.length > 0 && (
           <p className="mt-4 text-[12.5px] leading-relaxed text-[var(--ink-dim)]">
             No time logged this week for{" "}
-            <span className="text-[var(--ink)]">{facts.untouched.join(", ")}</span>.
+            <span className="text-[var(--ink)]">
+              {facts.untouched.join(", ")}
+            </span>
+            .
           </p>
         )}
 
         {topError && (
           <p className="mt-1.5 text-[12.5px] leading-relaxed text-[var(--ink-dim)]">
             Most common mistake:{" "}
-            <span className="text-[var(--ink)]">{topError[0]}</span> ({topError[1]}×).
+            <span className="text-[var(--ink)]">{topError[0]}</span> (
+            {topError[1]}×).
           </p>
         )}
 
         <div className="mt-5 border-t border-[var(--line-soft)] pt-4">
           {quiet ? (
             <p className="text-[12.5px] leading-relaxed text-[var(--ink-faint)]">
-              Not much logged yet this week — the written review turns on once there's something
-              to actually say.
+              Not much logged yet this week — the written review turns on once
+              there's something to actually say.
             </p>
           ) : prose ? (
             <div className="space-y-2.5">
-              {prose.split("\n").filter(Boolean).map((para, i) => (
-                <p key={i} className="text-[13px] leading-[1.65] text-[var(--ink)]">
-                  {para}
-                </p>
-              ))}
+              {prose
+                .split("\n")
+                .filter(Boolean)
+                .map((para, i) => (
+                  <p
+                    key={i}
+                    className="text-[13px] leading-[1.65] text-[var(--ink)]"
+                  >
+                    {para}
+                  </p>
+                ))}
               <p className="pt-1 text-[11.5px] text-[var(--ink-faint)]">
                 Written by {status?.model}. The numbers above are Retain's own.
               </p>
@@ -120,8 +137,12 @@ export function WeeklyReview({ onOpenSettings }: { onOpenSettings: () => void })
 function Figure({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="tabular text-[21px] font-medium tracking-[-0.02em]">{value}</div>
-      <div className="mt-0.5 text-[11.5px] text-[var(--ink-faint)]">{label}</div>
+      <div className="tabular text-[21px] font-medium tracking-[var(--track-display)]">
+        {value}
+      </div>
+      <div className="mt-0.5 text-[11.5px] text-[var(--ink-faint)]">
+        {label}
+      </div>
     </div>
   );
 }

@@ -237,7 +237,7 @@ export function Markdown({
         <h3
           key={`h-${blocks.length}`}
           className={cx(
-            "font-semibold tracking-[-0.015em] text-[var(--ink)]",
+            "font-semibold tracking-[var(--track-display)] text-[var(--ink)]",
             size,
           )}
         >

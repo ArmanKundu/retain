@@ -125,10 +125,12 @@ export function Settings() {
 
   return (
     <div className="mx-auto w-full max-w-[min(1080px,100%)] px-6 pb-16 sm:px-9">
-      <div className="titlebar-drag h-11" />
+      {/* Content scrolls under the title bar. macOS separates the two with a
+          hard edge rather than letting text vanish mid-letter. */}
+      <div className="titlebar-drag scroll-edge h-11" />
 
       <header className="animate-rise mb-6">
-        <h1 className="text-[28px] font-semibold tracking-[-0.028em]">
+        <h1 className="text-[28px] font-semibold tracking-[var(--track-display)]">
           Settings
         </h1>
       </header>

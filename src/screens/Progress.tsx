@@ -18,10 +18,14 @@ export function Progress() {
 
   return (
     <div className="mx-auto max-w-[880px] px-9 pb-14">
-      <div className="titlebar-drag h-11" />
+      {/* Content scrolls under the title bar. macOS separates the two with a
+          hard edge rather than letting text vanish mid-letter. */}
+      <div className="titlebar-drag scroll-edge h-11" />
 
       <header className="animate-in mb-7">
-        <h1 className="text-[28px] font-semibold tracking-[-0.028em]">Progress</h1>
+        <h1 className="text-[28px] font-semibold tracking-[var(--track-display)]">
+          Progress
+        </h1>
         <p className="mt-1 text-[14px] text-[var(--ink-dim)]">
           {activeDays > 0
             ? `${duration(totalMinutes * 60)} across ${activeDays} ${activeDays === 1 ? "day" : "days"}.`
@@ -44,7 +48,9 @@ export function Progress() {
           <Stat
             icon={<Shield size={14} className="text-[var(--ink-faint)]" />}
             value={streak.freezesAvailable}
-            label={streak.freezesAvailable === 1 ? "freeze ready" : "freezes ready"}
+            label={
+              streak.freezesAvailable === 1 ? "freeze ready" : "freezes ready"
+            }
           />
         </div>
       )}
@@ -55,20 +61,25 @@ export function Progress() {
           <ul className="mt-3 space-y-2 text-[13px] leading-relaxed text-[var(--ink-dim)]">
             <li>
               One session with at least{" "}
-              <span className="text-[var(--ink)]">{streak.thresholdMinutes} minutes</span> of active
-              time — pauses, idle time and breaks don't count toward it.
+              <span className="text-[var(--ink)]">
+                {streak.thresholdMinutes} minutes
+              </span>{" "}
+              of active time — pauses, idle time and breaks don't count toward
+              it.
             </li>
             <li>Or clearing every review that was due that day.</li>
             {streak.restDays.length > 0 && (
               <li>
                 {streak.restDays.map((d) => WEEKDAY_LABELS[d]).join(" and ")}{" "}
-                {streak.restDays.length === 1 ? "is a rest day" : "are rest days"} — they never break
-                a run.
+                {streak.restDays.length === 1
+                  ? "is a rest day"
+                  : "are rest days"}{" "}
+                — they never break a run.
               </li>
             )}
             <li className="text-[var(--ink-faint)]">
-              A freeze covers a missed day on its own. You get one back every 7 earned days, up to
-              two.
+              A freeze covers a missed day on its own. You get one back every 7
+              earned days, up to two.
             </li>
           </ul>
         </Card>
@@ -94,7 +105,9 @@ export function Progress() {
 
       <WeeklyReview onOpenSettings={() => setRoute("settings")} />
 
-      {openDay && <DayDetailSheet date={openDay} onClose={() => setOpenDay(null)} />}
+      {openDay && (
+        <DayDetailSheet date={openDay} onClose={() => setOpenDay(null)} />
+      )}
     </div>
   );
 }
@@ -112,7 +125,7 @@ function Stat({
     <Card className="p-4">
       <div className="flex items-center gap-1.5">
         {icon}
-        <span className="tabular text-[24px] font-semibold leading-none tracking-[-0.02em]">
+        <span className="tabular text-[24px] font-semibold leading-none tracking-[var(--track-display)]">
           {value}
         </span>
       </div>

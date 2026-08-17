@@ -52,7 +52,10 @@ export function ApiKeyField({
         await onChange();
       }
     } catch (e) {
-      setState({ kind: "result", check: { status: "unreachable", message: String(e) } });
+      setState({
+        kind: "result",
+        check: { status: "unreachable", message: String(e) },
+      });
     }
   };
 
@@ -64,7 +67,10 @@ export function ApiKeyField({
       setState({ kind: "idle" });
       await onChange();
     } catch (e) {
-      setState({ kind: "result", check: { status: "invalid", message: String(e) } });
+      setState({
+        kind: "result",
+        check: { status: "invalid", message: String(e) },
+      });
     }
   };
 
@@ -73,7 +79,10 @@ export function ApiKeyField({
     try {
       setState({ kind: "result", check: await api.secretTestStored(provider) });
     } catch (e) {
-      setState({ kind: "result", check: { status: "unreachable", message: String(e) } });
+      setState({
+        kind: "result",
+        check: { status: "unreachable", message: String(e) },
+      });
     }
   };
 
@@ -94,7 +103,12 @@ export function ApiKeyField({
               <Check size={14} />
               In Keychain
             </span>
-            <Button size="sm" variant="ghost" onClick={testStored} disabled={state.kind === "checking"}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={testStored}
+              disabled={state.kind === "checking"}
+            >
               {state.kind === "checking" ? "Checking…" : "Test"}
             </Button>
             <Button size="sm" variant="ghost" onClick={remove}>
@@ -122,7 +136,11 @@ export function ApiKeyField({
             onKeyDown={(e) => e.key === "Enter" && key.trim() && void verify()}
             className="h-8 flex-1 rounded-[var(--r-sm)] border border-[var(--line)] bg-[var(--surface-hi)] px-2.5 text-[13px] text-[var(--ink)]"
           />
-          <Button size="sm" onClick={verify} disabled={!key.trim() || state.kind === "checking"}>
+          <Button
+            size="sm"
+            onClick={verify}
+            disabled={!key.trim() || state.kind === "checking"}
+          >
             {state.kind === "checking" ? (
               <>
                 <Loader2 size={13} className="animate-spin" />
@@ -153,7 +171,9 @@ export function ApiKeyField({
         </div>
       )}
 
-      {state.kind === "result" && <Outcome check={state.check} onSaveAnyway={saveAnyway} />}
+      {state.kind === "result" && (
+        <Outcome check={state.check} onSaveAnyway={saveAnyway} />
+      )}
     </div>
   );
 }

@@ -11,7 +11,13 @@ import type { WeeklyGoalRing } from "../lib/types";
  * Progress is capped at 1 for the arc — going past your goal shouldn't wrap the
  * ring around a second time and make 110% look like 10%.
  */
-export function GoalRing({ ring, size = 72 }: { ring: WeeklyGoalRing; size?: number }) {
+export function GoalRing({
+  ring,
+  size = 72,
+}: {
+  ring: WeeklyGoalRing;
+  size?: number;
+}) {
   const stroke = size / 9;
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -45,7 +51,9 @@ export function GoalRing({ ring, size = 72 }: { ring: WeeklyGoalRing; size?: num
             strokeLinecap="round"
             strokeDasharray={circumference}
             strokeDashoffset={circumference * (1 - shown)}
-            style={{ transition: "stroke-dashoffset 600ms var(--ease-out-soft)" }}
+            style={{
+              transition: "stroke-dashoffset 600ms var(--ease-out-soft)",
+            }}
           />
         </svg>
 

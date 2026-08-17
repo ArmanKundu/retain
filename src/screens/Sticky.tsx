@@ -222,7 +222,7 @@ export function Sticky({ noteId }: { noteId: number }) {
             you have to read one by one. */}
         <span
           data-tauri-drag-region
-          className="min-w-0 flex-1 truncate text-[11px] font-medium tracking-[-0.005em]"
+          className="min-w-0 flex-1 truncate text-[11px] font-medium tracking-[var(--track-small)]"
           style={{ color: `rgb(var(--paper-${key}-ink) / 0.62)` }}
         >
           {blocks.find((b) => b.text.trim())?.text.trim() || "New note"}

@@ -60,10 +60,12 @@ export function Today() {
 
   return (
     <div className="mx-auto w-full max-w-[min(1100px,100%)] px-6 pb-16 sm:px-10">
-      <div className="titlebar-drag h-11" />
+      {/* Content scrolls under the title bar. macOS separates the two with a
+          hard edge rather than letting text vanish mid-letter. */}
+      <div className="titlebar-drag scroll-edge h-11" />
 
       <header className="animate-rise mb-7">
-        <h1 className="text-[30px] font-semibold tracking-[-0.03em]">
+        <h1 className="text-[30px] font-semibold tracking-[var(--track-display)]">
           {greeting(boot?.userName ?? "")}
         </h1>
         <p className="mt-1.5 text-[15px] leading-relaxed text-[var(--ink-dim)]">
@@ -93,7 +95,7 @@ export function Today() {
             <div className="text-[12px] font-medium uppercase tracking-[0.07em] text-[var(--ink-faint)]">
               {next.eyebrow}
             </div>
-            <h2 className="mt-2 text-[24px] font-semibold leading-tight tracking-[-0.02em]">
+            <h2 className="mt-2 text-[24px] font-semibold leading-tight tracking-[var(--track-display)]">
               {next.title}
             </h2>
             <p className="mt-1.5 text-[13.5px] leading-relaxed text-[var(--ink-dim)]">
@@ -406,7 +408,7 @@ function DayRing({
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <div
-          className="tabular text-[22px] font-medium leading-none tracking-[-0.02em]"
+          className="tabular text-[22px] font-medium leading-none tracking-[var(--track-display)]"
           style={{ color: qualified ? "var(--color-positive)" : "var(--ink)" }}
         >
           {minutes}
@@ -444,7 +446,7 @@ function Figure({
   const body = (
     <>
       <div
-        className="tabular flex items-center gap-1.5 text-[19px] font-medium leading-none tracking-[-0.02em]"
+        className="tabular flex items-center gap-1.5 text-[19px] font-medium leading-none tracking-[var(--track-display)]"
         style={accent ? { color: accent } : undefined}
       >
         {icon}

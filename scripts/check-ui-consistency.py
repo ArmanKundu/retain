@@ -12,6 +12,22 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SRC = ROOT / "src"
 
+# Letterspacing has a direction, and it is San Francisco's: looser below 14px
+# so small text stays legible, neutral through the body range, tighter only at
+# display sizes. The app had eight ad-hoc values and tightened captions, which
+# is backwards — these three tokens are the whole scale.
+ALLOWED_TRACKING = {
+    "tracking-[var(--track-small)]",
+    "tracking-[var(--track-body)]",
+    "tracking-[var(--track-display)]",
+    # Uppercase eyebrow labels genuinely want wide tracking, and it is not on
+    # the same scale as body copy.
+    "tracking-[0.07em]",
+    "tracking-[0.04em]",
+    "tracking-normal",
+    "tracking-tight",
+}
+
 ALLOWED_RADII = {
     "rounded-full",
     "rounded-[var(--r-xs)]",
@@ -89,6 +105,19 @@ for p in files:
         if r not in ALLOWED_RADII:
             bad.append(f"{p.relative_to(ROOT)}: {r}")
 check("radii come from the token scale", sorted(set(bad)))
+
+# 2b. Letterspacing must come from the token scale.
+#
+# The app had eight ad-hoc values, and several of them tightened small text —
+# which is backwards. San Francisco wants looser tracking below 14px so
+# captions stay legible, and tighter only at display sizes; a value picked per
+# component can't hold that direction.
+bad = []
+for p in files:
+    for t in re.findall(r"tracking-\[[^\]]+\]", p.read_text()):
+        if t not in ALLOWED_TRACKING:
+            bad.append(f"{p.relative_to(ROOT)}: {t}")
+check("letterspacing comes from the token scale", sorted(set(bad)))
 
 # 3. Colour literals must be tokens, so light/dark both work.
 bad = []

@@ -1,8 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Check, Eye, Lock, Plus, Search, Trash2, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  Eye,
+  Lock,
+  Plus,
+  Search,
+  Trash2,
+  X,
+} from "lucide-react";
 
 import { AiAction, useAi } from "../components/Ai";
-import { Button, Card, ColourDot, Empty, SectionTitle, cx } from "../components/ui";
+import {
+  Button,
+  Card,
+  ColourDot,
+  Empty,
+  SectionTitle,
+  cx,
+} from "../components/ui";
 import { api } from "../lib/api";
 import { prettyDate } from "../lib/format";
 import type {
@@ -87,16 +103,25 @@ export function ErrorLog() {
 
   return (
     <div className="mx-auto w-full max-w-[min(980px,100%)] px-6 sm:px-9 pb-14">
-      <div className="titlebar-drag h-11" />
+      {/* Content scrolls under the title bar. macOS separates the two with a
+          hard edge rather than letting text vanish mid-letter. */}
+      <div className="titlebar-drag scroll-edge h-11" />
 
       <header className="mb-6 flex items-center">
         <div>
-          <h1 className="text-[24px] font-semibold tracking-[-0.025em]">Error log</h1>
+          <h1 className="text-[24px] font-semibold tracking-[var(--track-display)]">
+            Error log
+          </h1>
           <p className="mt-1 text-[13.5px] text-[var(--ink-dim)]">
-            Every mistake worth learning from, and a blind re-attempt a week later.
+            Every mistake worth learning from, and a blind re-attempt a week
+            later.
           </p>
         </div>
-        <Button variant="primary" className="ml-auto" onClick={() => setComposing(true)}>
+        <Button
+          variant="primary"
+          className="ml-auto"
+          onClick={() => setComposing(true)}
+        >
           <Plus size={15} />
           Log an error
         </Button>
@@ -118,14 +143,19 @@ export function ErrorLog() {
             <Lock size={16} className="text-[var(--accent)]" />
             <div className="flex-1 text-[13.5px] leading-relaxed">
               <span className="font-medium">
-                {due.length} {due.length === 1 ? "error is" : "errors are"} ready for a blind
-                re-attempt
+                {due.length} {due.length === 1 ? "error is" : "errors are"}{" "}
+                ready for a blind re-attempt
               </span>
               <div className="text-[12.5px] text-[var(--ink-dim)]">
-                You'll answer from scratch. The mark scheme stays hidden until you've committed.
+                You'll answer from scratch. The mark scheme stays hidden until
+                you've committed.
               </div>
             </div>
-            <Button variant="primary" size="sm" onClick={() => void startReattempt(due[0])}>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => void startReattempt(due[0])}
+            >
               Start
             </Button>
           </div>
@@ -140,8 +170,12 @@ export function ErrorLog() {
             {recurring.slice(0, 3).map((c, i) => (
               <Card key={c.category} className="p-4">
                 <div className="flex items-baseline gap-2">
-                  <span className="tabular text-[22px] font-semibold leading-none">{c.count}</span>
-                  <span className="text-[11px] text-[var(--ink-faint)]">#{i + 1}</span>
+                  <span className="tabular text-[22px] font-semibold leading-none">
+                    {c.count}
+                  </span>
+                  <span className="text-[11px] text-[var(--ink-faint)]">
+                    #{i + 1}
+                  </span>
                 </div>
                 <div className="mt-1.5 text-[12.5px] leading-snug text-[var(--ink)]">
                   {c.category}
@@ -204,7 +238,9 @@ export function ErrorLog() {
 
           <select
             value={filter.category ?? ""}
-            onChange={(e) => setFilter({ ...filter, category: e.target.value || null })}
+            onChange={(e) =>
+              setFilter({ ...filter, category: e.target.value || null })
+            }
             className="h-8 rounded-[var(--r-sm)] border border-[var(--line)] bg-[var(--surface-hi)] px-2 text-[12.5px] text-[var(--ink)]"
           >
             <option value="">All categories</option>
@@ -216,7 +252,9 @@ export function ErrorLog() {
           </select>
 
           <button
-            onClick={() => setFilter({ ...filter, onlyUnfixed: !filter.onlyUnfixed })}
+            onClick={() =>
+              setFilter({ ...filter, onlyUnfixed: !filter.onlyUnfixed })
+            }
             className={cx(
               "h-8 rounded-[var(--r-sm)] border px-2.5 text-[12.5px] transition-colors",
               filter.onlyUnfixed
@@ -305,14 +343,19 @@ function EntryCard({
 
   return (
     <Card className="overflow-hidden">
-      <button className="w-full px-5 py-3.5 text-left" onClick={() => setOpen(!open)}>
+      <button
+        className="w-full px-5 py-3.5 text-left"
+        onClick={() => setOpen(!open)}
+      >
         <div className="flex items-center gap-2.5">
           <span
             className="h-full w-1 shrink-0 self-stretch rounded-full"
             style={{ background: categoryTint(entry.category) }}
           />
           <ColourDot colour={entry.colour} size={8} />
-          <span className="text-[12px] text-[var(--ink-faint)]">{entry.subjectName}</span>
+          <span className="text-[12px] text-[var(--ink-faint)]">
+            {entry.subjectName}
+          </span>
           <span
             className="rounded-full px-2 py-0.5 text-[11px]"
             style={{
@@ -350,18 +393,26 @@ function EntryCard({
         <div className="animate-in border-t border-[var(--line-soft)] px-5 py-4">
           <dl className="space-y-3 text-[13px]">
             {entry.source && <Field label="Source">{entry.source}</Field>}
-            {entry.commandWord && <Field label="Command word">{entry.commandWord}</Field>}
+            {entry.commandWord && (
+              <Field label="Command word">{entry.commandWord}</Field>
+            )}
             {entry.topicName && <Field label="Topic">{entry.topicName}</Field>}
-            {entry.myAnswer && <Field label="What I wrote">{entry.myAnswer}</Field>}
+            {entry.myAnswer && (
+              <Field label="What I wrote">{entry.myAnswer}</Field>
+            )}
             {/*
               The mark scheme is shown here deliberately: this is the review
               view for an entry you are editing, not a re-attempt. The blind
               path never renders this component.
             */}
-            {entry.correctAnswer && <Field label="Mark scheme">{entry.correctAnswer}</Field>}
+            {entry.correctAnswer && (
+              <Field label="Mark scheme">{entry.correctAnswer}</Field>
+            )}
             <Field label="Logged">{prettyDate(entry.loggedOn)}</Field>
             {entry.revisitOn && !entry.fixedAt && (
-              <Field label="Blind re-attempt due">{prettyDate(entry.revisitOn)}</Field>
+              <Field label="Blind re-attempt due">
+                {prettyDate(entry.revisitOn)}
+              </Field>
             )}
             {entry.reattemptCount > 0 && (
               <Field label="Attempts">{entry.reattemptCount}</Field>
@@ -389,11 +440,21 @@ function EntryCard({
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
     <div>
-      <dt className="text-[11px] uppercase tracking-[0.07em] text-[var(--ink-faint)]">{label}</dt>
-      <dd className="selectable mt-0.5 leading-relaxed text-[var(--ink)]">{children}</dd>
+      <dt className="text-[11px] uppercase tracking-[0.07em] text-[var(--ink-faint)]">
+        {label}
+      </dt>
+      <dd className="selectable mt-0.5 leading-relaxed text-[var(--ink)]">
+        {children}
+      </dd>
     </div>
   );
 }
@@ -450,7 +511,11 @@ function ReattemptModal({
     try {
       const m = marks.trim() === "" ? null : Number(marks);
       setOutcome(
-        await api.assessErrorReattempt(prompt.reattemptId, a, Number.isNaN(m as number) ? null : m),
+        await api.assessErrorReattempt(
+          prompt.reattemptId,
+          a,
+          Number.isNaN(m as number) ? null : m,
+        ),
       );
     } catch (e) {
       setError(String(e));
@@ -464,9 +529,13 @@ function ReattemptModal({
       <div className="sheet animate-pop max-h-[86vh] w-full max-w-[620px] overflow-y-auto p-7">
         <div className="flex items-center gap-2">
           <ColourDot colour={prompt.colour} size={8} />
-          <span className="text-[12.5px] text-[var(--ink-faint)]">{prompt.subjectName}</span>
+          <span className="text-[12.5px] text-[var(--ink-faint)]">
+            {prompt.subjectName}
+          </span>
           {prompt.source && (
-            <span className="text-[12.5px] text-[var(--ink-faint)]">· {prompt.source}</span>
+            <span className="text-[12.5px] text-[var(--ink-faint)]">
+              · {prompt.source}
+            </span>
           )}
           {prompt.marksAvailable != null && (
             <span className="ml-auto text-[12.5px] text-[var(--ink-faint)]">
@@ -481,22 +550,27 @@ function ReattemptModal({
 
         {prompt.commandWord && (
           <p className="mt-2 text-[12.5px] text-[var(--ink-faint)]">
-            Command word: <span className="text-[var(--ink-dim)]">{prompt.commandWord}</span>
+            Command word:{" "}
+            <span className="text-[var(--ink-dim)]">{prompt.commandWord}</span>
           </p>
         )}
 
-        {prompt.marksAvailable != null && prompt.marksAvailable > 1 && !committed && (
-          <p className="mt-3 rounded-[var(--r-sm)] bg-[var(--surface-hi)] px-3 py-2 text-[12.5px] text-[var(--ink-dim)]">
-            {prompt.marksAvailable} marks available — did you make at least one distinct point per
-            mark?
-          </p>
-        )}
+        {prompt.marksAvailable != null &&
+          prompt.marksAvailable > 1 &&
+          !committed && (
+            <p className="mt-3 rounded-[var(--r-sm)] bg-[var(--surface-hi)] px-3 py-2 text-[12.5px] text-[var(--ink-dim)]">
+              {prompt.marksAvailable} marks available — did you make at least
+              one distinct point per mark?
+            </p>
+          )}
 
         {/* Step 1: write it out, blind */}
         <div className="mt-5">
           <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.07em] text-[var(--ink-faint)]">
             {committed ? <Check size={12} /> : <Lock size={12} />}
-            {committed ? "Your committed answer" : "Your answer — written from scratch"}
+            {committed
+              ? "Your committed answer"
+              : "Your answer — written from scratch"}
           </div>
           <textarea
             value={answer}
@@ -513,7 +587,9 @@ function ReattemptModal({
           />
         </div>
 
-        {error && <div className="mt-3 text-[12.5px] text-[var(--danger)]">{error}</div>}
+        {error && (
+          <div className="mt-3 text-[12.5px] text-[var(--danger)]">{error}</div>
+        )}
 
         {/* Step 2: only after committing does a reveal control exist at all */}
         {!committed ? (
@@ -527,7 +603,12 @@ function ReattemptModal({
             Commit answer
           </Button>
         ) : !revealed ? (
-          <Button size="lg" className="mt-4 w-full" disabled={busy} onClick={reveal}>
+          <Button
+            size="lg"
+            className="mt-4 w-full"
+            disabled={busy}
+            onClick={reveal}
+          >
             <Eye size={15} />
             Show the mark scheme
           </Button>
@@ -545,7 +626,9 @@ function ReattemptModal({
             {outcome === null ? (
               <div className="mt-4">
                 <div className="flex items-center gap-2">
-                  <span className="text-[12.5px] text-[var(--ink-dim)]">Marks you'd award</span>
+                  <span className="text-[12.5px] text-[var(--ink-dim)]">
+                    Marks you'd award
+                  </span>
                   <input
                     type="number"
                     min={0}
@@ -562,10 +645,18 @@ function ReattemptModal({
                 </div>
 
                 <div className="mt-3 grid grid-cols-3 gap-2">
-                  <Button size="sm" disabled={busy} onClick={() => void assess("incorrect")}>
+                  <Button
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => void assess("incorrect")}
+                  >
                     Missed it
                   </Button>
-                  <Button size="sm" disabled={busy} onClick={() => void assess("partial")}>
+                  <Button
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => void assess("partial")}
+                  >
                     Partly
                   </Button>
                   <Button
@@ -578,8 +669,8 @@ function ReattemptModal({
                   </Button>
                 </div>
                 <p className="mt-2 text-[11.5px] leading-relaxed text-[var(--ink-faint)]">
-                  Only "Got it" marks this fixed. Anything else schedules another blind attempt in a
-                  week.
+                  Only "Got it" marks this fixed. Anything else schedules
+                  another blind attempt in a week.
                 </p>
               </div>
             ) : (
@@ -587,12 +678,18 @@ function ReattemptModal({
                 {outcome ? (
                   <>
                     <Check size={15} className="text-[var(--color-positive)]" />
-                    <span>Fixed — you answered it correctly without seeing the scheme.</span>
+                    <span>
+                      Fixed — you answered it correctly without seeing the
+                      scheme.
+                    </span>
                   </>
                 ) : (
                   <>
                     <AlertTriangle size={15} className="text-[var(--warn)]" />
-                    <span>Logged. It'll come back for another blind attempt in a week.</span>
+                    <span>
+                      Logged. It'll come back for another blind attempt in a
+                      week.
+                    </span>
                   </>
                 )}
               </div>
@@ -625,7 +722,9 @@ function ComposeModal({
   const [subjectId, setSubjectId] = useState(subjects[0]?.id ?? 0);
   const { enabled: aiEnabled } = useAi();
   // undefined = not asked yet; null = asked, nothing in the allowed list.
-  const [suggested, setSuggested] = useState<string | null | undefined>(undefined);
+  const [suggested, setSuggested] = useState<string | null | undefined>(
+    undefined,
+  );
   const [categories, setCategories] = useState<string[]>([]);
   const [words, setWords] = useState<CommandWord[]>([]);
   const [form, setForm] = useState({
@@ -661,7 +760,9 @@ function ComposeModal({
 
   /** Paste a screenshot straight in — the fastest way to log a diagram question. */
   const onPaste = (e: React.ClipboardEvent) => {
-    const file = Array.from(e.clipboardData.files).find((f) => f.type.startsWith("image/"));
+    const file = Array.from(e.clipboardData.files).find((f) =>
+      f.type.startsWith("image/"),
+    );
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => setImage(reader.result as string);
@@ -684,7 +785,9 @@ function ComposeModal({
         category: form.category,
         fix: form.fix || null,
         marksLost: form.marksLost ? Number(form.marksLost) : null,
-        marksAvailable: form.marksAvailable ? Number(form.marksAvailable) : null,
+        marksAvailable: form.marksAvailable
+          ? Number(form.marksAvailable)
+          : null,
       });
       await onSaved();
     } catch (e) {
@@ -694,7 +797,8 @@ function ComposeModal({
     }
   };
 
-  const set = (k: keyof typeof form) => (v: string) => setForm({ ...form, [k]: v });
+  const set = (k: keyof typeof form) => (v: string) =>
+    setForm({ ...form, [k]: v });
   const activeWord = words.find((w) => w.word === form.commandWord);
 
   return (
@@ -707,10 +811,12 @@ function ComposeModal({
             error" over seven labelled fields, which is the wrong frame for the
             moment right after you got something wrong. */}
         <header className="shrink-0 px-7 pt-7">
-          <h2 className="text-[22px] font-semibold tracking-[-0.02em]">Let's learn from this.</h2>
+          <h2 className="text-[22px] font-semibold tracking-[var(--track-display)]">
+            Let's learn from this.
+          </h2>
           <p className="mt-1.5 text-[13.5px] leading-relaxed text-[var(--ink-dim)]">
-            Capture what went wrong now, and Retain will bring it back for a blind re-attempt in a
-            week.
+            Capture what went wrong now, and Retain will bring it back for a
+            blind re-attempt in a week.
           </p>
         </header>
 
@@ -799,7 +905,9 @@ function ComposeModal({
                 <div className="ml-auto">
                   <AiAction
                     label="Suggest"
-                    disabled={!form.myAnswer.trim() || !form.correctAnswer.trim()}
+                    disabled={
+                      !form.myAnswer.trim() || !form.correctAnswer.trim()
+                    }
                     run={() =>
                       api.aiSuggestCategory(
                         subjectId,
@@ -880,12 +988,17 @@ function ComposeModal({
               value={form.fix}
               onChange={(e) => set("fix")(e.target.value)}
               placeholder="Name the bond type — don't just say 'it breaks'."
-              className={cx(INPUT, "mt-2.5 h-10 bg-[var(--surface)] text-[13.5px]")}
+              className={cx(
+                INPUT,
+                "mt-2.5 h-10 bg-[var(--surface)] text-[13.5px]",
+              )}
             />
           </section>
 
           <div className="mt-5 flex flex-wrap items-center gap-2">
-            <span className="text-[12.5px] text-[var(--ink-faint)]">Marks lost</span>
+            <span className="text-[12.5px] text-[var(--ink-faint)]">
+              Marks lost
+            </span>
             <input
               type="number"
               value={form.marksLost}
@@ -906,11 +1019,16 @@ function ComposeModal({
               value={form.source}
               onChange={(e) => set("source")(e.target.value)}
               placeholder="Where from? e.g. 2024 VCAA, Q7b"
-              className={cx(INPUT, "ml-auto h-8 max-w-[260px] flex-1 text-[12.5px]")}
+              className={cx(
+                INPUT,
+                "ml-auto h-8 max-w-[260px] flex-1 text-[12.5px]",
+              )}
             />
           </div>
 
-          {error && <p className="mt-4 text-[12.5px] text-[var(--danger)]">{error}</p>}
+          {error && (
+            <p className="mt-4 text-[12.5px] text-[var(--danger)]">{error}</p>
+          )}
         </div>
 
         <footer className="flex shrink-0 items-center gap-2 border-t border-[var(--line-soft)] px-7 py-4">
@@ -921,7 +1039,11 @@ function ComposeModal({
             <Button variant="ghost" onClick={onClose}>
               Cancel
             </Button>
-            <Button variant="primary" disabled={busy || !form.category} onClick={save}>
+            <Button
+              variant="primary"
+              disabled={busy || !form.category}
+              onClick={save}
+            >
               {busy ? "Saving…" : "Log it"}
             </Button>
           </div>
@@ -943,7 +1065,9 @@ function FormField({
 }) {
   return (
     <div className={className}>
-      <label className="mb-1.5 block text-[13px] font-medium text-[var(--ink)]">{label}</label>
+      <label className="mb-1.5 block text-[13px] font-medium text-[var(--ink)]">
+        {label}
+      </label>
       {children}
     </div>
   );
@@ -954,4 +1078,3 @@ const AREA =
 
 const INPUT =
   "w-full rounded-[var(--r-sm)] border border-[var(--line)] bg-[var(--surface-hi)] px-2.5 text-[13px] text-[var(--ink)] h-8 focus:border-[var(--accent)]";
-

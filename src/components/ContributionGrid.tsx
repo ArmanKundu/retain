@@ -8,7 +8,20 @@ import { ColourDot } from "./ui";
 
 const CELL = 11;
 const GAP = 3;
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
 
 /**
  * A year of study, GitHub-style.
@@ -26,7 +39,11 @@ export function ContributionGrid({
   /** Clicking a day opens its breakdown. Optional — the grid still works alone. */
   onSelect?: (date: string) => void;
 }) {
-  const [hovered, setHovered] = useState<{ day: GridDay; x: number; y: number } | null>(null);
+  const [hovered, setHovered] = useState<{
+    day: GridDay;
+    x: number;
+    y: number;
+  } | null>(null);
 
   const byDate = useMemo(() => new Map(days.map((d) => [d.date, d])), [days]);
 
@@ -126,7 +143,9 @@ export function ContributionGrid({
                         width: CELL,
                         height: CELL,
                         background: future ? "transparent" : cellColour(day),
-                        outline: day?.qualified ? "1px solid rgba(255,255,255,0.14)" : undefined,
+                        outline: day?.qualified
+                          ? "1px solid rgba(255,255,255,0.14)"
+                          : undefined,
                         outlineOffset: -1,
                       }}
                     />
@@ -149,7 +168,9 @@ export function ContributionGrid({
               width: CELL,
               height: CELL,
               background: cellColour(
-                m === 0 ? undefined : ({ minutes: m, bySubject: [] } as unknown as GridDay),
+                m === 0
+                  ? undefined
+                  : ({ minutes: m, bySubject: [] } as unknown as GridDay),
               ),
             }}
           />
@@ -168,9 +189,17 @@ export function ContributionGrid({
  * than that stops being distinguishable at 11 pixels.
  */
 function cellColour(day?: GridDay): string {
-  if (!day || day.minutes === 0) return "color-mix(in srgb, var(--ink-faint) 13%, transparent)";
+  if (!day || day.minutes === 0)
+    return "color-mix(in srgb, var(--ink-faint) 13%, transparent)";
 
-  const alpha = day.minutes >= 180 ? 1 : day.minutes >= 90 ? 0.78 : day.minutes >= 45 ? 0.55 : 0.33;
+  const alpha =
+    day.minutes >= 180
+      ? 1
+      : day.minutes >= 90
+        ? 0.78
+        : day.minutes >= 45
+          ? 0.55
+          : 0.33;
   const base = day.bySubject[0]?.colour ?? "var(--accent)";
   return `color-mix(in srgb, ${base} ${alpha * 100}%, transparent)`;
 }
@@ -181,7 +210,9 @@ function Tooltip({ day, x, y }: { day: GridDay; x: number; y: number }) {
       className="glass pointer-events-none fixed z-40 -translate-x-1/2 -translate-y-full rounded-[var(--r-md)] px-3 py-2.5"
       style={{ left: x, top: y - 8 }}
     >
-      <div className="text-[12px] font-medium text-[var(--ink)]">{prettyDate(day.date)}</div>
+      <div className="text-[12px] font-medium text-[var(--ink)]">
+        {prettyDate(day.date)}
+      </div>
       <div className="mt-0.5 text-[11.5px] text-[var(--ink-dim)]">
         {day.minutes === 0 ? "No sessions" : duration(day.minutes * 60)}
       </div>
@@ -189,9 +220,14 @@ function Tooltip({ day, x, y }: { day: GridDay; x: number; y: number }) {
       {day.bySubject.length > 0 && (
         <div className="mt-2 space-y-1 border-t border-[var(--line-soft)] pt-2">
           {day.bySubject.map((s) => (
-            <div key={s.subjectId} className="flex items-center gap-2 whitespace-nowrap">
+            <div
+              key={s.subjectId}
+              className="flex items-center gap-2 whitespace-nowrap"
+            >
               <ColourDot colour={s.colour} size={7} />
-              <span className="text-[11.5px] text-[var(--ink-dim)]">{s.subjectName}</span>
+              <span className="text-[11.5px] text-[var(--ink-dim)]">
+                {s.subjectName}
+              </span>
               <span className="tabular ml-auto pl-3 text-[11.5px] text-[var(--ink-faint)]">
                 {duration(s.minutes * 60)}
               </span>

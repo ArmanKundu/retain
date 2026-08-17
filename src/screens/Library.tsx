@@ -105,10 +105,12 @@ export function Library() {
 
   return (
     <div className="mx-auto w-full max-w-[min(920px,100%)] px-6 pb-16 sm:px-9">
-      <div className="titlebar-drag h-11" />
+      {/* Content scrolls under the title bar. macOS separates the two with a
+          hard edge rather than letting text vanish mid-letter. */}
+      <div className="titlebar-drag scroll-edge h-11" />
 
       <header className="animate-rise mb-6">
-        <h1 className="text-[28px] font-semibold tracking-[-0.028em]">
+        <h1 className="text-[28px] font-semibold tracking-[var(--track-display)]">
           Library
         </h1>
         <p className="mt-1.5 text-[14px] leading-relaxed text-[var(--ink-dim)]">
@@ -348,7 +350,7 @@ function ItemViewer({
       >
         <div className="flex items-start gap-3 px-9 pb-5 pt-8">
           <div className="min-w-0 flex-1">
-            <h2 className="text-[27px] font-semibold leading-tight tracking-[-0.025em]">
+            <h2 className="text-[27px] font-semibold leading-tight tracking-[var(--track-display)]">
               {item.title}
             </h2>
             {/* Metadata as quiet pills rather than a run-on line of separators. */}

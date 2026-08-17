@@ -20,8 +20,19 @@
 // most people will never open, because the defaults are nearly always right.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification";
-import { Bell, Check, ChevronLeft, GraduationCap, Plus, Sparkles, X } from "lucide-react";
+import {
+  isPermissionGranted,
+  requestPermission,
+} from "@tauri-apps/plugin-notification";
+import {
+  Bell,
+  Check,
+  ChevronLeft,
+  GraduationCap,
+  Plus,
+  Sparkles,
+  X,
+} from "lucide-react";
 
 import { api } from "../lib/api";
 import {
@@ -32,7 +43,12 @@ import {
   inferType,
   nextColour,
 } from "../lib/catalogue";
-import type { Provider, SubjectInput, SubjectType, UnitLevel } from "../lib/types";
+import type {
+  Provider,
+  SubjectInput,
+  SubjectType,
+  UnitLevel,
+} from "../lib/types";
 import { ApiKeyField } from "../components/ApiKeyField";
 import { Button, ColourDot, Segmented, cx } from "../components/ui";
 import { useApp } from "../store";
@@ -84,7 +100,8 @@ export function Onboarding() {
     }
   };
 
-  const canContinue = step === 0 ? name.trim().length > 0 : step === 1 ? drafts.length > 0 : true;
+  const canContinue =
+    step === 0 ? name.trim().length > 0 : step === 1 ? drafts.length > 0 : true;
   const last = step === STEPS.length - 1;
 
   return (
@@ -116,7 +133,13 @@ export function Onboarding() {
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-[560px] px-8 py-8">
-          {step === 0 && <NameStep name={name} setName={setName} onEnter={() => setStep(1)} />}
+          {step === 0 && (
+            <NameStep
+              name={name}
+              setName={setName}
+              onEnter={() => setStep(1)}
+            />
+          )}
           {step === 1 && <SubjectsStep drafts={drafts} setDrafts={setDrafts} />}
           {step === 2 && <NotificationsStep />}
           {step === 3 && <AssistantStep />}
@@ -135,7 +158,9 @@ export function Onboarding() {
             </button>
           )}
 
-          {error && <span className="text-[12.5px] text-[var(--danger)]">{error}</span>}
+          {error && (
+            <span className="text-[12.5px] text-[var(--danger)]">{error}</span>
+          )}
 
           <Button
             size="lg"
@@ -157,9 +182,13 @@ export function Onboarding() {
 function Heading({ title, body }: { title: string; body?: string }) {
   return (
     <header className="animate-rise mb-7">
-      <h1 className="text-[27px] font-semibold leading-tight tracking-[-0.028em]">{title}</h1>
+      <h1 className="text-[27px] font-semibold leading-tight tracking-[var(--track-display)]">
+        {title}
+      </h1>
       {body && (
-        <p className="mt-2 text-[14.5px] leading-relaxed text-[var(--ink-dim)]">{body}</p>
+        <p className="mt-2 text-[14.5px] leading-relaxed text-[var(--ink-dim)]">
+          {body}
+        </p>
       )}
     </header>
   );
@@ -183,7 +212,9 @@ function NameStep({
         title="Let's set you up."
         body="Retain lives entirely on this Mac. No account, no server, nothing sent anywhere."
       />
-      <label className="block text-[13.5px] font-medium">What should I call you?</label>
+      <label className="block text-[13.5px] font-medium">
+        What should I call you?
+      </label>
       <input
         ref={ref}
         value={name}
@@ -234,7 +265,8 @@ function SubjectsStep({
 
     setDrafts((current) => {
       if (current.length >= MAX) return current;
-      if (current.some((d) => d.name.toLowerCase() === clean.toLowerCase())) return current;
+      if (current.some((d) => d.name.toLowerCase() === clean.toLowerCase()))
+        return current;
 
       return [
         ...current,
@@ -272,12 +304,16 @@ function SubjectsStep({
       <div className="flex flex-wrap gap-2">
         {VCE_SUBJECTS.map((s) => {
           const isChosen = chosen.has(s.name.toLowerCase());
-          const draft = drafts.find((d) => d.name.toLowerCase() === s.name.toLowerCase());
+          const draft = drafts.find(
+            (d) => d.name.toLowerCase() === s.name.toLowerCase(),
+          );
 
           return (
             <button
               key={s.name}
-              onClick={() => (isChosen && draft ? remove(draft.id) : add(s.name, s.type))}
+              onClick={() =>
+                isChosen && draft ? remove(draft.id) : add(s.name, s.type)
+              }
               disabled={!isChosen && full}
               aria-pressed={isChosen}
               className={cx(
@@ -352,9 +388,12 @@ function SubjectsStep({
                     onClick={() => setExpanded(expanded === d.id ? null : d.id)}
                     className="min-w-0 flex-1 text-left"
                   >
-                    <span className="block truncate text-[14px] text-[var(--ink)]">{d.name}</span>
+                    <span className="block truncate text-[14px] text-[var(--ink)]">
+                      {d.name}
+                    </span>
                     <span className="block text-[11.5px] text-[var(--ink-faint)]">
-                      {UNIT_LEVEL_LABELS[d.unitLevel]} · {SUBJECT_TYPE_LABELS[d.subjectType]}
+                      {UNIT_LEVEL_LABELS[d.unitLevel]} ·{" "}
+                      {SUBJECT_TYPE_LABELS[d.subjectType]}
                     </span>
                   </button>
                   <button
@@ -381,7 +420,9 @@ function SubjectsStep({
                       size="sm"
                       value={d.subjectType}
                       onChange={(v) => patch(d.id, { subjectType: v })}
-                      options={(Object.keys(SUBJECT_TYPE_LABELS) as SubjectType[]).map((t) => ({
+                      options={(
+                        Object.keys(SUBJECT_TYPE_LABELS) as SubjectType[]
+                      ).map((t) => ({
                         value: t,
                         label: SUBJECT_TYPE_LABELS[t],
                       }))}
@@ -394,7 +435,8 @@ function SubjectsStep({
                           onClick={() => patch(d.id, { colour: c })}
                           className={cx(
                             "pressable h-5 w-5 rounded-full",
-                            d.colour === c && "ring-2 ring-[var(--ink)] ring-offset-2 ring-offset-[var(--surface)]",
+                            d.colour === c &&
+                              "ring-2 ring-[var(--ink)] ring-offset-2 ring-offset-[var(--surface)]",
                           )}
                           style={{ background: c }}
                         />
@@ -418,7 +460,9 @@ function NotificationsStep() {
   const [asking, setAsking] = useState(false);
 
   useEffect(() => {
-    void isPermissionGranted().then(setGranted).catch(() => setGranted(false));
+    void isPermissionGranted()
+      .then(setGranted)
+      .catch(() => setGranted(false));
   }, []);
 
   return (
@@ -432,7 +476,9 @@ function NotificationsStep() {
         <div className="flex items-start gap-3">
           <div
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
-            style={{ background: "color-mix(in srgb, var(--accent) 14%, transparent)" }}
+            style={{
+              background: "color-mix(in srgb, var(--accent) 14%, transparent)",
+            }}
           >
             {granted ? (
               <Check size={16} className="text-[var(--color-positive)]" />
@@ -500,7 +546,9 @@ function AssistantStep() {
         <div className="mb-4 flex items-center gap-2.5">
           <Sparkles size={15} className="text-[var(--accent)]" />
           <span className="text-[14px] font-medium">Add a key</span>
-          <span className="ml-auto text-[12px] text-[var(--ink-faint)]">Skip if you'd rather</span>
+          <span className="ml-auto text-[12px] text-[var(--ink-faint)]">
+            Skip if you'd rather
+          </span>
         </div>
 
         <Segmented
@@ -518,23 +566,35 @@ function AssistantStep() {
         <div className="mt-3 rounded-[var(--r-md)] border border-[var(--line-soft)]">
           <ApiKeyField
             provider={provider}
-            label={provider === "open_ai" ? "OpenAI" : provider === "open_router" ? "OpenRouter" : provider === "gemini" ? "Gemini" : "Anthropic"}
+            label={
+              provider === "open_ai"
+                ? "OpenAI"
+                : provider === "open_router"
+                  ? "OpenRouter"
+                  : provider === "gemini"
+                    ? "Gemini"
+                    : "Anthropic"
+            }
             present={present}
             onChange={async () => refresh()}
           />
         </div>
 
         <p className="mt-3 text-[12px] leading-relaxed text-[var(--ink-faint)]">
-          Keys are checked with the provider before they're saved, and kept in your macOS Keychain
-          — never in Retain's database, its exports, or any log.
+          Keys are checked with the provider before they're saved, and kept in
+          your macOS Keychain — never in Retain's database, its exports, or any
+          log.
         </p>
       </div>
 
       <div className="mt-6 flex items-start gap-2.5 text-[13px] leading-relaxed text-[var(--ink-dim)]">
-        <GraduationCap size={16} className="mt-0.5 shrink-0 text-[var(--ink-faint)]" />
+        <GraduationCap
+          size={16}
+          className="mt-0.5 shrink-0 text-[var(--ink-faint)]"
+        />
         <p>
-          That's everything. Retain will make a folder for each subject in Documents — drop your
-          notes and past papers in whenever you're ready.
+          That's everything. Retain will make a folder for each subject in
+          Documents — drop your notes and past papers in whenever you're ready.
         </p>
       </div>
     </>

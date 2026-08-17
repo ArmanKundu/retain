@@ -71,10 +71,12 @@ export function SessionNotePrompt({
     >
       <div className="sheet animate-pop w-full max-w-[460px] p-7">
         <div className="flex items-baseline gap-2.5">
-          <span className="tabular text-[30px] font-semibold leading-none tracking-[-0.03em]">
+          <span className="tabular text-[30px] font-semibold leading-none tracking-[var(--track-display)]">
             {duration(session.activeSeconds)}
           </span>
-          <span className="text-[15px] text-[var(--ink-dim)]">on {session.subjectName}</span>
+          <span className="text-[15px] text-[var(--ink-dim)]">
+            on {session.subjectName}
+          </span>
         </div>
 
         <div className="mt-2 text-[13px] leading-relaxed text-[var(--ink-dim)]">
@@ -82,14 +84,18 @@ export function SessionNotePrompt({
           {session.pauseCount > 0 && (
             <>
               {" "}
-              {session.pauseCount} {session.pauseCount === 1 ? "pause" : "pauses"}
-              {session.idlePauseCount > 0 && `, ${session.idlePauseCount} from inactivity`}
+              {session.pauseCount}{" "}
+              {session.pauseCount === 1 ? "pause" : "pauses"}
+              {session.idlePauseCount > 0 &&
+                `, ${session.idlePauseCount} from inactivity`}
               {notCounted > 0 && ` — ${duration(notCounted)} not counted`}.
             </>
           )}
         </div>
 
-        <label className="mt-5 block text-[13px] font-medium">What did you work on?</label>
+        <label className="mt-5 block text-[13px] font-medium">
+          What did you work on?
+        </label>
         <textarea
           ref={inputRef}
           value={note}
@@ -102,14 +108,23 @@ export function SessionNotePrompt({
         {confirmingDiscard ? (
           <div className="animate-rise mt-5 rounded-[var(--r-md)] border border-[color-mix(in_srgb,var(--danger)_28%,transparent)] bg-[color-mix(in_srgb,var(--danger)_8%,transparent)] p-4">
             <p className="text-[13px] leading-relaxed text-[var(--ink)]">
-              Throw away {duration(session.activeSeconds)}? It won't count towards today or your
-              week.
+              Throw away {duration(session.activeSeconds)}? It won't count
+              towards today or your week.
             </p>
             <div className="mt-3 flex gap-2">
-              <Button size="sm" variant="danger" disabled={busy} onClick={() => void discard()}>
+              <Button
+                size="sm"
+                variant="danger"
+                disabled={busy}
+                onClick={() => void discard()}
+              >
                 Yes, discard it
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setConfirmingDiscard(false)}>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setConfirmingDiscard(false)}
+              >
                 Keep it
               </Button>
             </div>

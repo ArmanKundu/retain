@@ -10,9 +10,26 @@
    --------------------------------------------------------------------------- */
 
 @theme {
+  /* No `"SF Pro Text"`.
+     
+     Naming it pinned the Text optical cut, and San Francisco blends Text into
+     Display continuously between 17 and 28pt — sturdier letterforms and looser
+     tracking below, tighter and more refined above. A hardcoded single cut
+     can't do that, so every heading in the app was being set in the small-text
+     design. `system-ui` resolves to the variable family and lets the blend
+     happen. */
   --font-sans:
-    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue",
-    Helvetica, Arial, sans-serif;
+    system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica,
+    Arial, sans-serif;
+
+  /* Tracking, in the direction San Francisco actually wants it.
+  
+     The app had eight ad-hoc values and tightened small text, which is
+     backwards: small sizes need *looser* letterspacing to stay legible, and
+     only display sizes want it pulled in. These three are the whole scale. */
+  --track-small: 0.006em; /* under 14px — captions, metadata */
+  --track-body: 0; /* 14–20px — the system's own default */
+  --track-display: -0.021em; /* over 20px — headings and hero numbers */
 
   --color-canvas: #0b0b0d;
   --color-surface: #141417;
@@ -377,6 +394,9 @@ html[data-window="capture"] body {
 
 body {
   font-family: var(--font-sans);
+  /* Lets the browser pick the optical size along with the weight, which is the
+     other half of dropping the pinned cut above. */
+  font-optical-sizing: auto;
   background: var(--canvas);
   color: var(--ink);
 
@@ -803,4 +823,71 @@ textarea:focus-visible,
   --paper-lilac-ink: 36 29 61;
   --paper-slate: 226 229 233;
   --paper-slate-ink: 29 33 39;
+}
+
+/* Type scale ----------------------------------------------------------------
+
+   Three classes rather than a tracking value chosen per component. The
+   direction is San Francisco's: looser under 14px, neutral through the body
+   range, tighter only at display sizes. */
+
+.t-small {
+  letter-spacing: var(--track-small);
+}
+.t-body {
+  letter-spacing: var(--track-body);
+}
+.t-display {
+  letter-spacing: var(--track-display);
+}
+
+/* Concentric corners --------------------------------------------------------
+
+   A rounded box inside a rounded box only looks right when the inner radius is
+   the outer radius minus the gap between them. Matching radii — which is what
+   picking two values off a scale gives you — leaves the inner corner visibly
+   too round, and it's the detail that separates a Mac window from a web page.
+
+   Set `--r-parent` on the outer element and the children inherit the maths. */
+
+.concentric {
+  border-radius: calc(
+    var(--r-parent, var(--r-lg)) - var(--concentric-gap, 10px)
+  );
+}
+
+/* Scroll edge ---------------------------------------------------------------
+
+   macOS separates floating chrome from content that scrolls under it with a
+   hard edge — a short, dense fade rather than the soft one used on iOS. Retain
+   has floating headers over scrolling content and had nothing, so text slid
+   under the title and simply vanished mid-letter. */
+
+.scroll-edge {
+  position: relative;
+}
+.scroll-edge::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 28px;
+  pointer-events: none;
+  z-index: 1;
+  background: linear-gradient(
+    to bottom,
+    var(--canvas) 0%,
+    color-mix(in srgb, var(--canvas) 55%, transparent) 55%,
+    transparent 100%
+  );
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  /* The system renders glass as an opaque, contrasting surface when asked. */
+  .glass,
+  .spotlight,
+  .spotlight-orb {
+    background: var(--surface-hi) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
 }

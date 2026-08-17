@@ -4,7 +4,11 @@
 // a look, and that look is exactly the "Bootstrap dashboard" the brief rules out.
 // These are small enough to keep honest.
 
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
+import type {
+  ButtonHTMLAttributes,
+  InputHTMLAttributes,
+  ReactNode,
+} from "react";
 
 export function cx(...parts: (string | false | null | undefined)[]): string {
   return parts.filter(Boolean).join(" ");
@@ -37,7 +41,8 @@ export function Button({
       "bg-[var(--accent)] text-white shadow-[var(--e-sm)] hover:brightness-[1.07] hover:shadow-[var(--e-md)]",
     secondary:
       "bg-[var(--surface-hi)] text-[var(--ink)] border border-[var(--line)] hover:border-[var(--ink-faint)] hover:shadow-[var(--e-sm)]",
-    ghost: "text-[var(--ink-dim)] hover:text-[var(--ink)] hover:bg-[var(--surface-hi)]",
+    ghost:
+      "text-[var(--ink-dim)] hover:text-[var(--ink)] hover:bg-[var(--surface-hi)]",
     danger:
       "bg-transparent text-[var(--danger)] border border-[var(--line)] hover:border-[var(--danger)] hover:bg-[color-mix(in_srgb,var(--danger)_8%,transparent)]",
   };
@@ -68,6 +73,13 @@ export function Button({
  * than on it. That's what stops nested cards from stacking shadow on shadow,
  * which was the main source of visual noise before this pass.
  */
+/**
+ * A surface. Publishes its own radius as `--r-parent` so anything nested
+ * inside can size its corners concentrically — inner radius is the outer
+ * radius minus the padding between them, and matching radii (which is what
+ * picking two values off a scale gives you) leaves the inner corner
+ * visibly too round.
+ */
 export function Card({
   children,
   className,
@@ -88,6 +100,9 @@ export function Card({
         className,
       )}
       {...rest}
+      // After the spread, or a caller passing `style` would drop it — and this
+      // is what `.concentric` children read.
+      style={{ ["--r-parent" as string]: "var(--r-lg)", ...rest.style }}
     >
       {children}
     </div>
@@ -102,7 +117,7 @@ export function Card({
  */
 export function SectionTitle({ children }: { children: ReactNode }) {
   return (
-    <h2 className="text-[13px] font-semibold tracking-[-0.005em] text-[var(--ink-dim)]">
+    <h2 className="text-[13px] font-semibold tracking-[var(--track-body)] text-[var(--ink-dim)]">
       {children}
     </h2>
   );
@@ -119,7 +134,9 @@ export function TextField({
   return (
     <label className="block">
       {label && (
-        <span className="mb-1.5 block text-[13px] font-medium text-[var(--ink-dim)]">{label}</span>
+        <span className="mb-1.5 block text-[13px] font-medium text-[var(--ink-dim)]">
+          {label}
+        </span>
       )}
       <input
         className={cx(
@@ -130,7 +147,11 @@ export function TextField({
         )}
         {...props}
       />
-      {hint && <span className="mt-1.5 block text-[12px] text-[var(--ink-faint)]">{hint}</span>}
+      {hint && (
+        <span className="mt-1.5 block text-[12px] text-[var(--ink-faint)]">
+          {hint}
+        </span>
+      )}
     </label>
   );
 }
@@ -163,7 +184,9 @@ export function Segmented<T extends string>({
             onClick={() => onChange(o.value)}
             className={cx(
               "rounded-[var(--r-sm)] font-medium transition-all duration-[140ms]",
-              size === "sm" ? "h-6 px-2.5 text-[12px]" : "h-8 px-3.5 text-[13px]",
+              size === "sm"
+                ? "h-6 px-2.5 text-[12px]"
+                : "h-8 px-3.5 text-[13px]",
               selected
                 ? "bg-[var(--surface)] text-[var(--ink)] shadow-[var(--e-sm)]"
                 : "text-[var(--ink-faint)] hover:text-[var(--ink-dim)]",
@@ -223,7 +246,13 @@ export function Toggle({
 
 // ---------------------------------------------------------------------------
 
-export function ColourDot({ colour, size = 10 }: { colour: string; size?: number }) {
+export function ColourDot({
+  colour,
+  size = 10,
+}: {
+  colour: string;
+  size?: number;
+}) {
   return (
     <span
       className="inline-block shrink-0 rounded-full"
@@ -235,7 +264,9 @@ export function ColourDot({ colour, size = 10 }: { colour: string; size?: number
 export function Empty({ title, body }: { title: string; body: string }) {
   return (
     <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
-      <div className="text-[14px] font-medium text-[var(--ink-dim)]">{title}</div>
+      <div className="text-[14px] font-medium text-[var(--ink-dim)]">
+        {title}
+      </div>
       <div className="mt-1.5 max-w-[380px] text-[13px] leading-relaxed text-[var(--ink-faint)]">
         {body}
       </div>

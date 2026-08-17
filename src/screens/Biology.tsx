@@ -68,9 +68,13 @@ export function Biology() {
   if (!subject) {
     return (
       <div className="mx-auto w-full max-w-[min(920px,100%)] px-6 sm:px-9 pb-14">
-        <div className="titlebar-drag h-11" />
+        {/* Content scrolls under the title bar. macOS separates the two with a
+          hard edge rather than letting text vanish mid-letter. */}
+        <div className="titlebar-drag scroll-edge h-11" />
         <header className="mb-6">
-          <h1 className="text-[24px] font-semibold tracking-[-0.025em]">Biology 3/4</h1>
+          <h1 className="text-[24px] font-semibold tracking-[var(--track-display)]">
+            Biology 3/4
+          </h1>
         </header>
         <Card>
           <Empty
@@ -89,18 +93,26 @@ export function Biology() {
 
   return (
     <div className="mx-auto w-full max-w-[min(920px,100%)] px-6 sm:px-9 pb-14">
-      <div className="titlebar-drag h-11" />
+      {/* Content scrolls under the title bar. macOS separates the two with a
+          hard edge rather than letting text vanish mid-letter. */}
+      <div className="titlebar-drag scroll-edge h-11" />
 
       <header className="mb-6">
-        <h1 className="text-[24px] font-semibold tracking-[-0.025em]">Biology 3/4</h1>
+        <h1 className="text-[24px] font-semibold tracking-[var(--track-display)]">
+          Biology 3/4
+        </h1>
         <p className="mt-1 text-[13.5px] text-[var(--ink-dim)]">
-          The topic tree, exam simulation, and what the command words are actually asking for.
+          The topic tree, exam simulation, and what the command words are
+          actually asking for.
         </p>
       </header>
 
       <ExamPanel subject={subject} exam={exam} onChange={refreshExam} />
       <TopicTree subject={subject} />
-      <TerminologyPanel subject={subject} onAddCards={() => setRoute("import")} />
+      <TerminologyPanel
+        subject={subject}
+        onAddCards={() => setRoute("import")}
+      />
       <CommandWords />
     </div>
   );
@@ -164,7 +176,7 @@ function ExamPanel({
             <div className="flex items-baseline gap-3">
               <span
                 className={cx(
-                  "rounded-full px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.06em]",
+                  "rounded-full px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.07em]",
                   exam.phase === "reading"
                     ? "bg-[var(--accent)]/15 text-[var(--accent)]"
                     : exam.phase === "writing"
@@ -178,10 +190,12 @@ function ExamPanel({
                     ? "Writing time"
                     : "Time is up"}
               </span>
-              <span className="truncate text-[13px] text-[var(--ink-dim)]">{exam.run.name}</span>
+              <span className="truncate text-[13px] text-[var(--ink-dim)]">
+                {exam.run.name}
+              </span>
             </div>
 
-            <div className="tabular mt-3 text-[46px] font-medium leading-none tracking-[-0.03em]">
+            <div className="tabular mt-3 text-[46px] font-medium leading-none tracking-[var(--track-display)]">
               {clock(exam.remainingSeconds)}
             </div>
             <div className="mt-1.5 text-[12.5px] text-[var(--ink-dim)]">
@@ -207,23 +221,37 @@ function ExamPanel({
 
             <div className="mt-4 flex flex-wrap gap-2">
               {exam.phase !== "finished" && (
-                <Button size="sm" onClick={() => void act(() => api.setExamPaused(!exam.paused))}>
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    void act(() => api.setExamPaused(!exam.paused))
+                  }
+                >
                   {exam.paused ? <Play size={13} /> : <Pause size={13} />}
                   {exam.paused ? "Resume" : "Pause"}
                 </Button>
               )}
-              <Button size="sm" variant="primary" onClick={() => void act(api.finishExam)}>
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={() => void act(api.finishExam)}
+              >
                 <Square size={12} />
                 Finish and log
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => void act(api.cancelExam)}>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => void act(api.cancelExam)}
+              >
                 Discard
               </Button>
             </div>
 
             {exam.paused && (
               <p className="mt-3 text-[12px] leading-relaxed text-[var(--ink-faint)]">
-                Paused time is tracked separately and won't be counted as exam time.
+                Paused time is tracked separately and won't be counted as exam
+                time.
               </p>
             )}
           </div>
@@ -238,39 +266,50 @@ function ExamPanel({
               />
               <Button
                 variant="primary"
-                onClick={() => void act(() => api.startExam(subject.id, name)).then(() => setName(""))}
+                onClick={() =>
+                  void act(() => api.startExam(subject.id, name)).then(() =>
+                    setName(""),
+                  )
+                }
               >
                 <Clock size={14} />
                 Start
               </Button>
             </div>
             <p className="mt-3 text-[12.5px] leading-relaxed text-[var(--ink-faint)]">
-              15 minutes reading, then 2 hours 30 writing. The clock keeps running if you close
-              the window — it's stored as a start time, not a countdown, so quitting and
-              reopening picks up where you actually are.
+              15 minutes reading, then 2 hours 30 writing. The clock keeps
+              running if you close the window — it's stored as a start time, not
+              a countdown, so quitting and reopening picks up where you actually
+              are.
             </p>
           </div>
         )}
 
-        {error && <p className="mt-3 text-[12.5px] text-[var(--danger)]">{error}</p>}
+        {error && (
+          <p className="mt-3 text-[12.5px] text-[var(--danger)]">{error}</p>
+        )}
       </Card>
 
       {history.length > 0 && (
         <Card className="mt-2.5 divide-y divide-[var(--line-soft)] overflow-hidden">
           {history.map((h) => (
-            <div key={h.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
+            <div
+              key={h.id}
+              className="flex flex-wrap items-center gap-3 px-5 py-3"
+            >
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[13.5px]">{h.name}</div>
                 <div className="text-[11.5px] text-[var(--ink-faint)]">
                   {h.takenOn}
-                  {h.writingSeconds != null && ` · ${Math.round(h.writingSeconds / 60)} min writing`}
+                  {h.writingSeconds != null &&
+                    ` · ${Math.round(h.writingSeconds / 60)} min writing`}
                 </div>
               </div>
 
               {h.sectionAScore != null || h.sectionBScore != null ? (
                 <div className="tabular text-[12.5px] text-[var(--ink-dim)]">
-                  A {h.sectionAScore ?? "–"}/{h.sectionAMax} · B {h.sectionBScore ?? "–"}/
-                  {h.sectionBMax}
+                  A {h.sectionAScore ?? "–"}/{h.sectionAMax} · B{" "}
+                  {h.sectionBScore ?? "–"}/{h.sectionBMax}
                 </div>
               ) : (
                 <Button size="sm" variant="ghost" onClick={() => setScoring(h)}>
@@ -317,11 +356,21 @@ function ScoreDialog({
 
         <div className="mt-3 space-y-3">
           {[
-            { label: `Section A (out of ${exam.sectionAMax})`, value: a, set: setA },
-            { label: `Section B (out of ${exam.sectionBMax})`, value: b, set: setB },
+            {
+              label: `Section A (out of ${exam.sectionAMax})`,
+              value: a,
+              set: setA,
+            },
+            {
+              label: `Section B (out of ${exam.sectionBMax})`,
+              value: b,
+              set: setB,
+            },
           ].map((f) => (
             <div key={f.label}>
-              <label className="text-[12.5px] text-[var(--ink-dim)]">{f.label}</label>
+              <label className="text-[12.5px] text-[var(--ink-dim)]">
+                {f.label}
+              </label>
               <input
                 type="number"
                 value={f.value}
@@ -380,7 +429,11 @@ function TopicTree({ subject }: { subject: Subject }) {
           onClick={() => setImporting(!importing)}
           className="ml-auto text-[12px] text-[var(--ink-faint)] transition-colors hover:text-[var(--ink)]"
         >
-          {importing ? "Close" : tree.length ? "Replace outline" : "Paste your outline"}
+          {importing
+            ? "Close"
+            : tree.length
+              ? "Replace outline"
+              : "Paste your outline"}
         </button>
       </div>
 
@@ -438,14 +491,20 @@ function TopicRow({ node, depth }: { node: TopicNode; depth: number }) {
           <span
             className="ml-[2px] h-[7px] w-[7px] shrink-0 rounded-full"
             style={{ background: confidenceTint(node.confidence) }}
-            title={node.confidence ? `Confidence ${node.confidence}/5` : "Never rated"}
+            title={
+              node.confidence
+                ? `Confidence ${node.confidence}/5`
+                : "Never rated"
+            }
           />
         )}
 
         <span
           className={cx(
             "min-w-0 flex-1 truncate",
-            depth === 0 ? "text-[13.5px] font-medium" : "text-[13px] text-[var(--ink-dim)]",
+            depth === 0
+              ? "text-[13.5px] font-medium"
+              : "text-[13px] text-[var(--ink-dim)]",
           )}
         >
           {node.name}
@@ -453,12 +512,17 @@ function TopicRow({ node, depth }: { node: TopicNode; depth: number }) {
 
         <div className="flex shrink-0 items-center gap-2.5 text-[11px] text-[var(--ink-faint)]">
           {node.cardCount > 0 && <span>{node.cardCount} cards</span>}
-          {node.errorCount > 0 && <span className="text-[var(--warn)]">{node.errorCount} errors</span>}
+          {node.errorCount > 0 && (
+            <span className="text-[var(--warn)]">{node.errorCount} errors</span>
+          )}
           {node.lastReviewedOn && <span>{node.lastReviewedOn.slice(5)}</span>}
         </div>
       </div>
 
-      {open && node.children.map((c) => <TopicRow key={c.id} node={c} depth={depth + 1} />)}
+      {open &&
+        node.children.map((c) => (
+          <TopicRow key={c.id} node={c} depth={depth + 1} />
+        ))}
     </>
   );
 }
@@ -488,7 +552,10 @@ function OutlineImporter({
       return;
     }
     const t = setTimeout(() => {
-      void api.previewTopicOutline(text).then(setPreview).catch(() => setPreview([]));
+      void api
+        .previewTopicOutline(text)
+        .then(setPreview)
+        .catch(() => setPreview([]));
     }, 150);
     return () => clearTimeout(t);
   }, [text]);
@@ -499,13 +566,16 @@ function OutlineImporter({
         value={text}
         onChange={(e) => setText(e.target.value)}
         spellCheck={false}
-        placeholder={"Unit 3\n  Area of Study 1\n    first dot point\n    second dot point\n  Area of Study 2\nUnit 4"}
+        placeholder={
+          "Unit 3\n  Area of Study 1\n    first dot point\n    second dot point\n  Area of Study 2\nUnit 4"
+        }
         className="selectable h-40 w-full resize-none rounded-[var(--r-md)] border border-[var(--line)] bg-[var(--surface-hi)] p-3 font-mono text-[12.5px] leading-relaxed text-[var(--ink)] placeholder:text-[var(--ink-faint)] outline-none focus:border-[var(--accent)]"
       />
 
       <p className="mt-2.5 text-[12px] leading-relaxed text-[var(--ink-faint)]">
-        Indent with spaces or tabs to nest. Bullets and numbering are stripped. Copy this straight
-        out of your own study design — Retain doesn't ship VCAA content.
+        Indent with spaces or tabs to nest. Bullets and numbering are stripped.
+        Copy this straight out of your own study design — Retain doesn't ship
+        VCAA content.
       </p>
 
       {preview.length > 0 && (
@@ -524,8 +594,8 @@ function OutlineImporter({
 
       {hasExisting && preview.length > 0 && (
         <p className="mt-3 text-[12.5px] leading-relaxed text-[var(--warn)]">
-          This replaces the current topics. Cards and error entries stay, but lose their topic
-          link.
+          This replaces the current topics. Cards and error entries stay, but
+          lose their topic link.
         </p>
       )}
 
@@ -546,7 +616,9 @@ function OutlineImporter({
         >
           Import {preview.length > 0 && `${preview.length} topics`}
         </Button>
-        {error && <span className="text-[12.5px] text-[var(--danger)]">{error}</span>}
+        {error && (
+          <span className="text-[12.5px] text-[var(--danger)]">{error}</span>
+        )}
       </div>
     </Card>
   );
@@ -585,8 +657,8 @@ function TerminologyPanel({
               <code className="rounded bg-[var(--surface-hi)] px-1.5 py-0.5 font-mono text-[12px]">
                 terminology
               </code>{" "}
-              and they'll be tracked here as their own deck. Precise wording is most of the
-              difference between a 1-mark and a 2-mark answer.
+              and they'll be tracked here as their own deck. Precise wording is
+              most of the difference between a 1-mark and a 2-mark answer.
             </p>
             <Button size="sm" className="mt-3" onClick={onAddCards}>
               <BookOpen size={13} />
@@ -598,7 +670,12 @@ function TerminologyPanel({
             <Figure value={deck.total} label="terms" />
             <Figure value={deck.due} label="due now" />
             <Figure value={deck.new} label="not started" />
-            <Button size="sm" variant="ghost" className="ml-auto" onClick={onAddCards}>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="ml-auto"
+              onClick={onAddCards}
+            >
               Add more
             </Button>
           </div>
@@ -611,8 +688,12 @@ function TerminologyPanel({
 function Figure({ value, label }: { value: number; label: string }) {
   return (
     <div>
-      <div className="tabular text-[21px] font-medium tracking-[-0.02em]">{value}</div>
-      <div className="mt-0.5 text-[11.5px] text-[var(--ink-faint)]">{label}</div>
+      <div className="tabular text-[21px] font-medium tracking-[var(--track-display)]">
+        {value}
+      </div>
+      <div className="mt-0.5 text-[11.5px] text-[var(--ink-faint)]">
+        {label}
+      </div>
     </div>
   );
 }
@@ -625,7 +706,10 @@ function CommandWords() {
   const [words, setWords] = useState<CommandWord[]>([]);
 
   useEffect(() => {
-    void api.commandWords().then(setWords).catch(() => setWords([]));
+    void api
+      .commandWords()
+      .then(setWords)
+      .catch(() => setWords([]));
   }, []);
 
   if (words.length === 0) return null;
@@ -636,7 +720,9 @@ function CommandWords() {
       <Card className="mt-2.5 divide-y divide-[var(--line-soft)] overflow-hidden">
         {words.map((w) => (
           <div key={w.word} className="flex gap-4 px-5 py-2.5">
-            <span className="w-[92px] shrink-0 text-[13px] font-medium">{w.word}</span>
+            <span className="w-[92px] shrink-0 text-[13px] font-medium">
+              {w.word}
+            </span>
             <span className="flex-1 text-[12.5px] leading-relaxed text-[var(--ink-dim)]">
               {w.meaning}
             </span>
@@ -645,8 +731,8 @@ function CommandWords() {
 
         <p className="flex items-start gap-2 px-5 py-3.5 text-[11.5px] leading-relaxed text-[var(--ink-faint)]">
           <FileText size={12} className="mt-[2px] shrink-0" />
-          Plain-English guidance written for this app, not a copy of VCAA's glossary. Check the
-          study design for the official wording.
+          Plain-English guidance written for this app, not a copy of VCAA's
+          glossary. Check the study design for the official wording.
         </p>
       </Card>
     </section>

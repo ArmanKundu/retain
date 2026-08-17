@@ -14,7 +14,9 @@ export function TimerScreen({
 }) {
   const { subjects, timer, setTimer } = useApp();
 
-  const [subjectId, setSubjectId] = useState<number | null>(subjects[0]?.id ?? null);
+  const [subjectId, setSubjectId] = useState<number | null>(
+    subjects[0]?.id ?? null,
+  );
   // One clock. Pomodoro was removed — a fixed 25/5 rhythm is a different
   // product, and the idle detector already handles the "am I actually
   // working?" question it was there to answer.
@@ -60,13 +62,15 @@ export function TimerScreen({
               <ColourDot colour={timer.subjectColour} size={9} />
               {timer.subjectName}
               {timer.topicName && (
-                <span className="text-[var(--ink-faint)]">· {timer.topicName}</span>
+                <span className="text-[var(--ink-faint)]">
+                  · {timer.topicName}
+                </span>
               )}
             </div>
 
             <div
               className={cx(
-                "tabular mt-5 text-[80px] font-light leading-none tracking-[-0.03em] transition-colors duration-300",
+                "tabular mt-5 text-[80px] font-light leading-none tracking-[var(--track-display)] transition-colors duration-300",
                 paused ? "text-[var(--ink-faint)]" : "text-[var(--ink)]",
               )}
             >
@@ -83,13 +87,17 @@ export function TimerScreen({
                 </span>
               ) : timer.pausedReason === "idle" ? (
                 // Framed as the app doing its job, not as an accusation.
-                <span>Paused — no activity. It'll pick back up when you do.</span>
+                <span>
+                  Paused — no activity. It'll pick back up when you do.
+                </span>
               ) : timer.pausedReason === "manual" ? (
                 <span>Paused</span>
-              ) : timer.mode === "pomodoro" && timer.phaseRemainingSeconds != null ? (
+              ) : timer.mode === "pomodoro" &&
+                timer.phaseRemainingSeconds != null ? (
                 <span>
                   {clock(timer.phaseRemainingSeconds)} left in this block
-                  {timer.completedWorkBlocks > 0 && ` · ${timer.completedWorkBlocks} done`}
+                  {timer.completedWorkBlocks > 0 &&
+                    ` · ${timer.completedWorkBlocks} done`}
                 </span>
               ) : (
                 <span>Counting active time only</span>
@@ -98,12 +106,20 @@ export function TimerScreen({
 
             <div className="mt-9 flex items-center gap-2.5">
               {paused && !onBreak ? (
-                <Button size="lg" variant="primary" onClick={() => api.resumeTimer().then(setTimer)}>
+                <Button
+                  size="lg"
+                  variant="primary"
+                  onClick={() => api.resumeTimer().then(setTimer)}
+                >
                   <Play size={16} />
                   Resume
                 </Button>
               ) : (
-                <Button size="lg" onClick={() => api.pauseTimer().then(setTimer)} disabled={onBreak}>
+                <Button
+                  size="lg"
+                  onClick={() => api.pauseTimer().then(setTimer)}
+                  disabled={onBreak}
+                >
                   <Pause size={16} />
                   Pause
                 </Button>
@@ -118,14 +134,17 @@ export function TimerScreen({
                 comment. The number is the point; a scolding sentence isn't. */}
             {timer.pauseCount > 0 && (
               <div className="mt-8 text-[12.5px] text-[var(--ink-faint)]">
-                {timer.pauseCount} {timer.pauseCount === 1 ? "pause" : "pauses"} this session
-                {timer.idlePauseCount > 0 && ` · ${timer.idlePauseCount} from inactivity`}
+                {timer.pauseCount} {timer.pauseCount === 1 ? "pause" : "pauses"}{" "}
+                this session
+                {timer.idlePauseCount > 0 &&
+                  ` · ${timer.idlePauseCount} from inactivity`}
               </div>
             )}
 
             {timer.elapsedSeconds - timer.activeSeconds > 60 && (
               <div className="mt-1.5 text-[12.5px] text-[var(--ink-faint)]">
-                {duration(timer.elapsedSeconds - timer.activeSeconds)} not counted
+                {duration(timer.elapsedSeconds - timer.activeSeconds)} not
+                counted
               </div>
             )}
           </div>
@@ -141,10 +160,12 @@ export function TimerScreen({
 
       <div className="flex flex-1 items-center justify-center px-8 pb-16">
         <div className="animate-in w-full max-w-[440px]">
-          <h1 className="text-[24px] font-semibold tracking-[-0.025em]">Start a session</h1>
+          <h1 className="text-[24px] font-semibold tracking-[var(--track-display)]">
+            Start a session
+          </h1>
           <p className="mt-1.5 text-[13.5px] text-[var(--ink-dim)]">
-            The timer pauses itself after two minutes without input, so what it records is time you
-            were actually there.
+            The timer pauses itself after two minutes without input, so what it
+            records is time you were actually there.
           </p>
 
           <Card className="mt-6 p-5">
@@ -170,11 +191,14 @@ export function TimerScreen({
             </div>
 
             <p className="mt-5 border-t border-[var(--line-soft)] pt-4 text-[12px] leading-relaxed text-[var(--ink-faint)]">
-              Topic tagging arrives with the VCAA topic tree, in a later checkpoint.
+              Topic tagging arrives with the VCAA topic tree, in a later
+              checkpoint.
             </p>
           </Card>
 
-          {error && <div className="mt-3 text-[13px] text-[var(--danger)]">{error}</div>}
+          {error && (
+            <div className="mt-3 text-[13px] text-[var(--danger)]">{error}</div>
+          )}
 
           <Button
             size="lg"
@@ -191,4 +215,3 @@ export function TimerScreen({
     </div>
   );
 }
-

@@ -42,7 +42,11 @@ export function Surface({
   return (
     <Tag
       className={cx(
-        elevation === "floating" ? "glass" : elevation === "raised" ? "surface-2" : "surface-1",
+        elevation === "floating"
+          ? "glass"
+          : elevation === "raised"
+            ? "surface-2"
+            : "surface-1",
         elevation === "floating" && "rounded-[var(--r-xl)]",
         className,
       )}
@@ -71,9 +75,15 @@ export function SectionHeader({
 }) {
   return (
     <div className="mb-3 flex items-baseline gap-3">
-      <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-[var(--ink)]">{title}</h2>
-      {hint && <span className="text-[12.5px] text-[var(--ink-faint)]">{hint}</span>}
-      {children && <div className="ml-auto flex items-center gap-2">{children}</div>}
+      <h2 className="text-[15px] font-semibold tracking-[var(--track-body)] text-[var(--ink)]">
+        {title}
+      </h2>
+      {hint && (
+        <span className="text-[12.5px] text-[var(--ink-faint)]">{hint}</span>
+      )}
+      {children && (
+        <div className="ml-auto flex items-center gap-2">{children}</div>
+      )}
     </div>
   );
 }
@@ -113,7 +123,7 @@ export function Metric({
     <div className="min-w-0">
       <div
         className={cx(
-          "tabular flex items-center gap-2 font-medium leading-none tracking-[-0.03em]",
+          "tabular flex items-center gap-2 font-medium leading-none tracking-[var(--track-display)]",
           scale,
         )}
         style={accent ? { color: accent } : undefined}
@@ -121,7 +131,9 @@ export function Metric({
         {icon}
         <span className="truncate">{value}</span>
       </div>
-      <div className="mt-2 truncate text-[12px] text-[var(--ink-faint)]">{label}</div>
+      <div className="mt-2 truncate text-[12px] text-[var(--ink-faint)]">
+        {label}
+      </div>
     </div>
   );
 }
@@ -163,7 +175,9 @@ export function SubjectPill({
     <span
       className={cx(
         "inline-flex min-w-0 items-center gap-2 rounded-full border",
-        size === "sm" ? "px-2 py-0.5 text-[11.5px]" : "px-2.5 py-1 text-[12.5px]",
+        size === "sm"
+          ? "px-2 py-0.5 text-[11.5px]"
+          : "px-2.5 py-1 text-[12.5px]",
       )}
       style={{
         borderColor: `color-mix(in srgb, ${colour} 24%, transparent)`,
@@ -227,7 +241,9 @@ export function ProgressRing({
         />
       </svg>
       {children && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center">{children}</div>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          {children}
+        </div>
       )}
     </div>
   );
@@ -257,7 +273,9 @@ export function FloatingDock({
       className={cx(
         "pointer-events-none sticky bottom-5 z-30 flex justify-center px-6",
         "transition-all duration-[220ms] ease-[var(--ease)]",
-        visible ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-3 opacity-0",
+        visible
+          ? "translate-y-0 opacity-100"
+          : "pointer-events-none translate-y-3 opacity-0",
       )}
       aria-hidden={!visible}
     >
@@ -334,7 +352,13 @@ export function Chip({
  * Shortcuts should be discoverable in place rather than hidden in a help
  * screen, which only works if showing one is cheap.
  */
-export function Kbd({ children, className }: { children: ReactNode; className?: string }) {
+export function Kbd({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
   return (
     <kbd
       className={cx(
@@ -352,7 +376,13 @@ export function Kbd({ children, className }: { children: ReactNode; className?: 
 /**
  * A hairline separator. Fades at both ends so it doesn't box content in.
  */
-export function Divider({ className, style }: { className?: string; style?: CSSProperties }) {
+export function Divider({
+  className,
+  style,
+}: {
+  className?: string;
+  style?: CSSProperties;
+}) {
   return (
     <div
       className={cx("h-px w-full", className)}

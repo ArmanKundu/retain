@@ -21,7 +21,11 @@ import { Button, cx } from "./ui";
  * rows. A per-instance fetch would turn a ten-item inbox into forty Keychain
  * lookups on every render pass.
  */
-export function useAi(): { status: AiStatus | null; enabled: boolean; reload: () => void } {
+export function useAi(): {
+  status: AiStatus | null;
+  enabled: boolean;
+  reload: () => void;
+} {
   const status = useApp((s) => s.ai);
   const reload = useApp((s) => s.refreshAi);
 
@@ -54,12 +58,16 @@ export function AiGate({
   return (
     <div className="rounded-[var(--r-md)] border border-dashed border-[var(--line)] px-4 py-3.5">
       <div className="flex items-center gap-2 text-[13px] font-medium text-[var(--ink)]">
-        <Sparkles size={14} strokeWidth={1.9} className="text-[var(--ink-faint)]" />
+        <Sparkles
+          size={14}
+          strokeWidth={1.9}
+          className="text-[var(--ink-faint)]"
+        />
         Optional
       </div>
       <p className="mt-1.5 text-[12.5px] leading-relaxed text-[var(--ink-dim)]">
-        Add an API key in Settings and Retain can {what}. Everything else on this
-        screen works without one.
+        Add an API key in Settings and Retain can {what}. Everything else on
+        this screen works without one.
       </p>
       {onOpenSettings && (
         <button
@@ -115,7 +123,11 @@ export function AiAction<T>({
         <Sparkles size={13.5} strokeWidth={1.9} />
         {busy ? "Thinking…" : label}
       </Button>
-      {error && <p className="text-[12px] leading-relaxed text-[var(--danger)]">{error}</p>}
+      {error && (
+        <p className="text-[12px] leading-relaxed text-[var(--danger)]">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

@@ -183,10 +183,12 @@ export function Questions() {
 
   return (
     <div className="mx-auto w-full max-w-[min(1000px,100%)] px-6 pb-16 sm:px-9">
-      <div className="titlebar-drag h-11" />
+      {/* Content scrolls under the title bar. macOS separates the two with a
+          hard edge rather than letting text vanish mid-letter. */}
+      <div className="titlebar-drag scroll-edge h-11" />
 
       <header className="animate-rise mb-6">
-        <h1 className="text-[28px] font-semibold tracking-[-0.028em]">
+        <h1 className="text-[28px] font-semibold tracking-[var(--track-display)]">
           Past questions
         </h1>
         <p className="mt-1.5 text-[14px] leading-relaxed text-[var(--ink-dim)]">
@@ -659,7 +661,7 @@ function QuestionDetail({
         onClick={(e: React.MouseEvent) => e.stopPropagation()}
       >
         <div className="flex flex-wrap items-baseline gap-2">
-          <h2 className="text-[16px] font-semibold tracking-[-0.01em]">
+          <h2 className="text-[16px] font-semibold tracking-[var(--track-body)]">
             {question.label}
           </h2>
           <span className="text-[12.5px] text-[var(--ink-dim)]">

@@ -93,13 +93,14 @@ function Cloze({
   );
 }
 
-const PROMPT = "text-[13px] uppercase tracking-[0.07em] text-[var(--ink-faint)]";
+const PROMPT =
+  "text-[13px] uppercase tracking-[0.07em] text-[var(--ink-faint)]";
 
 /** The question side. Never contains the answer. */
 export function CardQuestion({ card }: { card: QueueItem }) {
   if (card.noteType === "cloze") {
     return (
-      <p className="selectable text-[22px] leading-[1.55] tracking-[-0.01em]">
+      <p className="selectable text-[22px] leading-[1.55] tracking-[var(--track-body)]">
         <Cloze source={card.front} index={card.clozeIndex} revealed={false} />
       </p>
     );
@@ -107,14 +108,16 @@ export function CardQuestion({ card }: { card: QueueItem }) {
 
   if (card.noteType === "quote") {
     return (
-      <blockquote className="selectable border-l-2 border-[var(--accent)]/40 pl-5 text-[22px] leading-[1.55] tracking-[-0.01em] italic">
+      <blockquote className="selectable border-l-2 border-[var(--accent)]/40 pl-5 text-[22px] leading-[1.55] tracking-[var(--track-body)] italic">
         “{card.front}”
       </blockquote>
     );
   }
 
   return (
-    <p className="selectable text-[22px] leading-[1.55] tracking-[-0.01em]">{card.front}</p>
+    <p className="selectable text-[22px] leading-[1.55] tracking-[var(--track-body)]">
+      {card.front}
+    </p>
   );
 }
 
@@ -122,7 +125,7 @@ export function CardQuestion({ card }: { card: QueueItem }) {
 export function CardAnswer({ card }: { card: QueueItem }) {
   if (card.noteType === "cloze") {
     return (
-      <p className="selectable text-[22px] leading-[1.55] tracking-[-0.01em]">
+      <p className="selectable text-[22px] leading-[1.55] tracking-[var(--track-body)]">
         <Cloze source={card.front} index={card.clozeIndex} revealed />
       </p>
     );
@@ -133,12 +136,16 @@ export function CardAnswer({ card }: { card: QueueItem }) {
       <div className="space-y-4">
         <div>
           <div className={PROMPT}>Source &amp; context</div>
-          <p className="selectable mt-1.5 text-[17px] leading-relaxed">{card.back}</p>
+          <p className="selectable mt-1.5 text-[17px] leading-relaxed">
+            {card.back}
+          </p>
         </div>
         {card.extra && (
           <div>
             <div className={PROMPT}>Theme</div>
-            <p className="selectable mt-1.5 text-[17px] leading-relaxed">{card.extra}</p>
+            <p className="selectable mt-1.5 text-[17px] leading-relaxed">
+              {card.extra}
+            </p>
           </div>
         )}
       </div>
@@ -148,7 +155,9 @@ export function CardAnswer({ card }: { card: QueueItem }) {
   return (
     <div>
       <div className={PROMPT}>Answer</div>
-      <p className="selectable mt-1.5 text-[19px] leading-relaxed">{card.back}</p>
+      <p className="selectable mt-1.5 text-[19px] leading-relaxed">
+        {card.back}
+      </p>
       {card.extra && (
         <p className="selectable mt-3 text-[14px] leading-relaxed text-[var(--ink-dim)]">
           {card.extra}

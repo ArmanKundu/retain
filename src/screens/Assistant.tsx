@@ -202,7 +202,9 @@ export function Assistant() {
     <div className="flex h-full min-h-0">
       {/* Conversations */}
       <aside className="flex w-[236px] shrink-0 flex-col border-r border-[var(--line-soft)]">
-        <div className="titlebar-drag h-11" />
+        {/* Content scrolls under the title bar. macOS separates the two with a
+          hard edge rather than letting text vanish mid-letter. */}
+        <div className="titlebar-drag scroll-edge h-11" />
 
         <div className="px-3 pb-2">
           <Button
@@ -267,7 +269,7 @@ export function Assistant() {
           <div className="mx-auto w-full max-w-[min(760px,100%)] px-6 pb-6 sm:px-9">
             {messages.length === 0 && (
               <header className="animate-rise mb-6">
-                <h1 className="text-[28px] font-semibold tracking-[-0.028em]">
+                <h1 className="text-[28px] font-semibold tracking-[var(--track-display)]">
                   Assistant
                 </h1>
                 <p className="mt-1.5 text-[14px] leading-relaxed text-[var(--ink-dim)]">

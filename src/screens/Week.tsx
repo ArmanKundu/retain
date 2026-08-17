@@ -163,11 +163,13 @@ export function Week() {
 
   return (
     <div className="mx-auto w-full max-w-[min(1200px,100%)] px-6 pb-16 sm:px-9">
-      <div className="titlebar-drag h-11" />
+      {/* Content scrolls under the title bar. macOS separates the two with a
+          hard edge rather than letting text vanish mid-letter. */}
+      <div className="titlebar-drag scroll-edge h-11" />
 
       <header className="animate-rise mb-6 flex flex-wrap items-end gap-4">
         <div>
-          <h1 className="text-[28px] font-semibold tracking-[-0.028em]">
+          <h1 className="text-[28px] font-semibold tracking-[var(--track-display)]">
             Your week
           </h1>
           <p className="mt-1.5 text-[14px] leading-relaxed text-[var(--ink-dim)]">
@@ -514,7 +516,7 @@ function BlockEditor({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start gap-3">
-          <h2 className="flex-1 text-[19px] font-semibold tracking-[-0.02em]">
+          <h2 className="flex-1 text-[19px] font-semibold tracking-[var(--track-display)]">
             {existing ? "Edit block" : "Block out some time"}
           </h2>
           <button

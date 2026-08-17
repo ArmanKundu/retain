@@ -323,7 +323,7 @@ function DeckDashboard({
         <div className="flex items-center gap-4">
           <MasteryRing value={stats.mastery} colour={colour} size={58} />
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-[17px] font-semibold tracking-[-0.01em]">
+            <h2 className="truncate text-[17px] font-semibold tracking-[var(--track-body)]">
               {target.label}
             </h2>
             <p className="mt-0.5 text-[12.5px] text-[var(--ink-dim)]">

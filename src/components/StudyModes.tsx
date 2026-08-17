@@ -22,10 +22,30 @@ import { Kbd } from "./primitives";
 
 export type StudyMode = "flip" | "write" | "hint";
 
-export const MODES: { value: StudyMode; label: string; icon: typeof Eye; blurb: string }[] = [
-  { value: "flip", label: "Flip", icon: RotateCw, blurb: "See it and judge yourself" },
-  { value: "write", label: "Write", icon: Keyboard, blurb: "Type the answer out" },
-  { value: "hint", label: "Hint", icon: Lightbulb, blurb: "Reveal it a piece at a time" },
+export const MODES: {
+  value: StudyMode;
+  label: string;
+  icon: typeof Eye;
+  blurb: string;
+}[] = [
+  {
+    value: "flip",
+    label: "Flip",
+    icon: RotateCw,
+    blurb: "See it and judge yourself",
+  },
+  {
+    value: "write",
+    label: "Write",
+    icon: Keyboard,
+    blurb: "Type the answer out",
+  },
+  {
+    value: "hint",
+    label: "Hint",
+    icon: Lightbulb,
+    blurb: "Reveal it a piece at a time",
+  },
 ];
 
 export function ModePicker({
@@ -158,8 +178,8 @@ export function WriteAnswer({
           {/* The judgement is a string comparison and shouldn't pretend
               otherwise — the rating below is still entirely yours. */}
           <p className="mt-1.5 text-[11.5px] leading-relaxed text-[var(--ink-faint)]">
-            Read the real answer below and rate it yourself — this check is a rough guide, not a
-            mark.
+            Read the real answer below and rate it yourself — this check is a
+            rough guide, not a mark.
           </p>
         </div>
       )}

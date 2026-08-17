@@ -211,3 +211,130 @@ fn the_context_block_labels_each_source_by_kind() {
     // The model is told the material outranks its own memory.
     assert!(block.contains("authoritative"));
 }
+
+// -- topics out of a study design --------------------------------------------
+//
+// The shape below is copied from the real VCE Biology study design, including
+// the private-use bullet the PDF actually contains.
+
+const STUDY_DESIGN: &str = "\
+Area of Study 1
+How do cells function?
+
+Key knowledge
+
+Cellular structure and function
+
+\u{F0B7} cells as the basic structural feature of life on Earth, including the distinction between
+prokaryotic and eukaryotic cells
+\u{F0B7} surface area to volume ratio as an important factor in the limitations of cell size
+
+VCE Biology Study Design 2022 Updated \u{2013} version 1.1
+
+\u{00A9} VCAA Page 19
+
+The cell cycle and cell growth, death and differentiation
+
+\u{F0B7} binary fission in prokaryotic cells
+\u{F0B7} the eukaryotic cell cycle, including the characteristics of each of the sub-phases
+
+Key science skills
+
+\u{F0B7} develop aims and questions
+";
+
+#[test]
+fn topic_names_come_out_of_the_study_design_verbatim() {
+    let topics = topics_from_study_design(STUDY_DESIGN);
+
+    assert_eq!(
+        topics,
+        vec![
+            // The Area of Study's own title. Some subjects — Maths, English —
+            // list dot points straight under Key knowledge with no headings
+            // between, and this is the only topic name their design carries.
+            "How do cells function?",
+            "Cellular structure and function",
+            "The cell cycle and cell growth, death and differentiation",
+        ],
+        "these are VCAA's words, not ours"
+    );
+}
+
+/// The wrapped second line of a dot point has no bullet on it, so it looks
+/// exactly like a heading unless something tells them apart.
+#[test]
+fn the_wrapped_tail_of_a_dot_point_is_not_a_heading() {
+    let topics = topics_from_study_design(STUDY_DESIGN);
+
+    assert!(!topics.iter().any(|t| t.starts_with("prokaryotic")));
+    assert!(!topics.iter().any(|t| t.contains("limitations of cell size")));
+}
+
+#[test]
+fn page_furniture_is_not_a_topic() {
+    let topics = topics_from_study_design(STUDY_DESIGN);
+
+    assert!(!topics.iter().any(|t| t.contains("VCAA")));
+    assert!(!topics.iter().any(|t| t.contains("Study Design")));
+}
+
+/// Two places carry topic names: an Area of Study's title, and the headings
+/// inside Key knowledge. Nothing else does — a skills list is not a topic.
+#[test]
+fn only_the_two_places_that_carry_topic_names_are_read() {
+    let topics = topics_from_study_design(STUDY_DESIGN);
+
+    assert!(!topics.iter().any(|t| t.to_lowercase().contains("science skills")));
+    assert!(!topics.iter().any(|t| t.to_lowercase() == "key skills"));
+    assert!(!topics.iter().any(|t| t.to_lowercase().starts_with("develop aims")));
+}
+
+/// A contents page lists every Area of Study padded out to a page number.
+/// Reading those would add each topic twice, once as a fragment.
+#[test]
+fn the_contents_page_is_not_read() {
+    let contents = "\
+Area of Study 1 ....................................................................... 18
+Area of Study 2 ....................................................................... 19
+";
+    assert!(topics_from_study_design(contents).is_empty());
+}
+
+#[test]
+fn a_document_with_no_key_knowledge_yields_nothing() {
+    assert!(topics_from_study_design("Some notes about enzymes.\nAnd more.").is_empty());
+}
+
+/// Re-running after uploading a newer study design should add what's new, not
+/// duplicate everything that was already there.
+#[test]
+fn importing_topics_twice_adds_them_once() {
+    let mut conn = db();
+    add(&mut conn, Some(1), "Biology SD", ResourceKind::StudyDesign, None, None, STUDY_DESIGN, now())
+        .unwrap();
+
+    assert_eq!(import_topics(&conn, 1).unwrap(), 3);
+    assert_eq!(import_topics(&conn, 1).unwrap(), 0, "second run adds nothing");
+
+    let names: Vec<String> = conn
+        .prepare("SELECT name FROM topics WHERE subject_id = 1 ORDER BY sort_order")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert_eq!(names.len(), 3);
+    assert_eq!(names[0], "How do cells function?");
+}
+
+/// Only study designs. Segmenting a past paper for "Key knowledge" would
+/// produce topics out of whatever happened to follow the words.
+#[test]
+fn only_study_designs_are_read_for_topics() {
+    let mut conn = db();
+    add(&mut conn, Some(1), "A paper", ResourceKind::PastPaper, None, None, STUDY_DESIGN, now())
+        .unwrap();
+
+    assert_eq!(import_topics(&conn, 1).unwrap(), 0);
+}

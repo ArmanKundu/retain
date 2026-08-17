@@ -596,6 +596,12 @@ export const api = {
   /** Work out which page each question sits on, a few papers at a time. */
   locateQuestionPages: (batch: number) =>
     invoke<IndexProgress>("locate_question_pages", { batch }),
+  /** Read topic names out of a subject's study designs. */
+  importTopics: (subjectId: number | null) =>
+    invoke<number>("import_topics_from_study_design", { subjectId }),
+  /** Re-run automatic tagging. Only touches tags Retain suggested. */
+  retagQuestions: (batch: number) =>
+    invoke<IndexProgress>("retag_questions", { batch }),
   questionTags: (subjectId: number | null) =>
     invoke<[string, number][]>("question_tags", { subjectId }),
   tagQuestion: (questionId: number, tag: string) =>

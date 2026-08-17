@@ -38,8 +38,35 @@ fn db() -> Connection {
         [],
     )
     .unwrap();
+
+    // Tagging reads the study design's vocabulary, not the topic list — see
+    // `auto_tags_by_vocabulary`. A subject with topic rows and no study design
+    // has nothing to match against, which is exactly the state the real
+    // library was in and why nothing was ever tagged.
+    conn.execute(
+        "INSERT INTO resources (id,subject_id,title,kind,content,word_count,added_at)
+         VALUES (99,1,'Biology SD','study_design',?1,10,'2026-08-01T00:00:00Z')",
+        [DESIGN],
+    )
+    .unwrap();
     conn
 }
+
+/// Two headings with enough distinctive vocabulary to be told apart. The
+/// bullet is the private-use character a real study design contains.
+const DESIGN: &str = "\
+Key knowledge
+
+Enzymes and metabolism
+
+\u{F0B7} enzymes as protein catalysts, including the active site and competitive inhibitors
+\u{F0B7} activation energy, denaturation and the effect of inhibitors on reaction rates
+
+Photosynthesis and respiration
+
+\u{F0B7} chloroplasts, thylakoids, the Calvin cycle and glucose production
+\u{F0B7} mitochondria, glycolysis and the electron transport chain
+";
 
 /// Default filters: no year range, no source, and solutions kept in — the
 /// tests are about segmentation and tagging, not the filter surface.
@@ -129,39 +156,72 @@ fn the_marker_is_recognised_in_the_forms_papers_use() {
 
 // -- tagging -----------------------------------------------------------------
 
-/// The only automatic tagging done. A built-in keyword list would mean Retain
-/// deciding what counts as a topic in VCE Biology, which is inventing
-/// curriculum — these are the student's own topic names.
+/// Vocabulary matching, which replaced matching on topic names.
+///
+/// Names barely worked: measured against the real library, whole-name matching
+/// tagged 37 questions out of 6,529, because a heading reads "Cellular
+/// structure and function" while the question says "active transport across
+/// the plasma membrane". The words that connect them are the study design's
+/// own dot points.
 #[test]
-fn auto_tags_come_from_the_students_own_topics() {
-    let topics = vec!["Enzymes".to_string(), "Photosynthesis".to_string()];
+fn a_question_is_tagged_by_the_words_its_topic_uses() {
+    let vocab = crate::resources::topic_vocabulary(DESIGN);
 
-    // Singular text, plural topic. This is how topic lists are actually
-    // written, and matching literally tagged nothing at all.
-    let tags = auto_tags("Explain how an enzyme lowers activation energy.", &topics);
-    assert_eq!(tags, vec!["Enzymes"]);
-    assert_eq!(auto_tags("Enzymes are catalysts.", &topics), vec!["Enzymes"]);
+    let tags = auto_tags_by_vocabulary(
+        "Describe how a competitive inhibitor affects the active site and the reaction rate.",
+        &vocab,
+    );
+    assert_eq!(tags, vec!["Enzymes and metabolism"]);
 
-    assert!(auto_tags("Describe the light-independent stage.", &topics).is_empty());
+    let other = auto_tags_by_vocabulary(
+        "Explain the role of chloroplasts and the Calvin cycle in glucose production.",
+        &vocab,
+    );
+    assert_eq!(other, vec!["Photosynthesis and respiration"]);
 }
 
-/// "Cell" tagging every question containing "excellent" is the failure that
-/// makes automatic tags worthless.
+/// A question that happens to use two or three words from a topic is not about
+/// that topic. Three distinct terms is the line.
 #[test]
-fn a_topic_inside_a_longer_word_is_not_a_match() {
-    let topics = vec!["Cell".to_string()];
+fn a_passing_mention_is_not_a_tag() {
+    let vocab = crate::resources::topic_vocabulary(DESIGN);
 
-    assert!(auto_tags("An excellent answer would mention this.", &topics).is_empty());
-    assert!(auto_tags("Cellular respiration occurs here.", &topics).is_empty());
-    assert_eq!(auto_tags("Describe the cell membrane.", &topics), vec!["Cell"]);
-    // The plural of the topic is still the topic.
-    assert_eq!(auto_tags("The cells divide by mitosis.", &topics), vec!["Cell"]);
+    assert!(auto_tags_by_vocabulary("Define energy.", &vocab).is_empty());
+    assert!(
+        auto_tags_by_vocabulary("The reaction produced energy.", &vocab).is_empty(),
+        "two words is a coincidence"
+    );
 }
 
+/// The design writes "inhibitors" and the question writes "inhibitor".
+/// Matching them exactly misses, and that is most of the vocabulary.
 #[test]
-fn very_short_topic_names_are_ignored() {
-    // A two-letter topic would match half the paper.
-    assert!(auto_tags("pH is measured on a scale.", &["pH".to_string()]).is_empty());
+fn plural_and_singular_are_the_same_word() {
+    let vocab = crate::resources::topic_vocabulary(DESIGN);
+
+    assert_eq!(
+        auto_tags_by_vocabulary(
+            "One inhibitor binds the active site; the enzyme catalyst is blocked.",
+            &vocab,
+        ),
+        vec!["Enzymes and metabolism"]
+    );
+}
+
+/// A question belongs to one topic. Six tags is the same as none.
+#[test]
+fn at_most_two_tags_are_given() {
+    let vocab = crate::resources::topic_vocabulary(DESIGN);
+    let both = "enzymes catalysts activation energy chloroplasts thylakoids glucose mitochondria";
+
+    assert!(auto_tags_by_vocabulary(both, &vocab).len() <= 2);
+}
+
+/// A subject with no study design uploaded has nothing to match against — the
+/// state the whole library was in, and why nothing was tagged.
+#[test]
+fn no_study_design_means_no_tags_rather_than_wrong_ones() {
+    assert!(auto_tags_by_vocabulary("Describe the active site.", &[]).is_empty());
 }
 
 // -- indexing and searching --------------------------------------------------
@@ -179,12 +239,10 @@ fn indexing_a_paper_stores_its_questions_with_tags() {
     assert_eq!(found[0].label, "Question 2 (4 marks)");
     assert_eq!(found[0].resource_title, "2005 STAV Unit 4");
     assert_eq!(found[0].subject_name.as_deref(), Some("Biology"));
-    // Question 2 talks about inhibitors and the active site, and never says
-    // "enzyme" — so it gets no automatic tag, which is the honest answer.
-    assert!(found[0].tags.is_empty());
-
-    let q1 = search(&conn, "activation", &any(), 10).unwrap();
-    assert_eq!(q1[0].tags, vec!["Enzymes"], "tagged from the topic list");
+    // Question 2 uses "competitive", "inhibitor" and "active site" — the
+    // study design's own words for that topic, which is the whole point of
+    // matching on vocabulary rather than on the heading's name.
+    assert_eq!(found[0].tags, vec!["Enzymes and metabolism"]);
 }
 
 /// Segmenting a study design on the word "Question" produces nonsense with a
@@ -239,15 +297,19 @@ fn a_tag_filter_works_with_and_without_a_query() {
     add_paper(&conn, 1, "Paper", "past_paper", PAPER);
     index_resource(&mut conn, 1).unwrap();
 
-    // Tag alone: no MATCH, so ordering must not touch bm25.
-    let by_tag = search(&conn, "", &tagged("Enzymes"), 10).unwrap();
-    assert_eq!(by_tag.len(), 1);
+    // Tag alone: no MATCH, so ordering must not touch bm25. Both questions are
+    // about enzymes, so both carry the tag.
+    let by_tag = search(&conn, "", &tagged("Enzymes and metabolism"), 10).unwrap();
+    assert_eq!(by_tag.len(), 2);
 
-    // Query and tag are an AND. "inhibitor" is question 2, which carries no
-    // Enzymes tag, so the pair matches nothing — and that is the point of
-    // combining them.
-    assert!(search(&conn, "inhibitor", &tagged("Enzymes"), 10).unwrap().is_empty());
-    assert_eq!(search(&conn, "activation", &tagged("Enzymes"), 10).unwrap().len(), 1);
+    // Query and tag are an AND.
+    assert_eq!(
+        search(&conn, "inhibitor", &tagged("Enzymes and metabolism"), 10).unwrap().len(),
+        1
+    );
+    assert!(search(&conn, "photosynthesis", &tagged("Enzymes and metabolism"), 10)
+        .unwrap()
+        .is_empty());
 
     assert!(search(&conn, "", &tagged("Nothing"), 10).unwrap().is_empty());
 }
@@ -279,7 +341,7 @@ fn tags_are_listed_most_used_first() {
     add_tag(&conn, ids[0], "sac").unwrap();
 
     let tags = all_tags(&conn, None).unwrap();
-    assert!(tags.contains(&("Enzymes".to_string(), 1)));
+    assert!(tags.iter().any(|(t, _)| t == "Enzymes and metabolism"), "{tags:?}");
     assert!(tags.contains(&("sac".to_string(), 1)));
 }
 

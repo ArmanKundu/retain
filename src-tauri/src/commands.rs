@@ -3250,3 +3250,104 @@ pub fn locate_question_pages(
         })
     }
 }
+
+/// Read topic names out of a subject's study designs.
+///
+/// Automatic question tagging matches against the student's topic list, and
+/// that list starts empty — nobody types forty topic names by hand, so nothing
+/// was ever tagged. The names are in the study design they already uploaded.
+#[tauri::command]
+pub fn import_topics_from_study_design(
+    state: State<'_, AppState>,
+    subject_id: Option<i64>,
+) -> CmdResult<usize> {
+    let conn = db(&state);
+
+    let subjects: Vec<i64> = match subject_id {
+        Some(id) => vec![id],
+        None => {
+            let mut stmt = conn.prepare("SELECT id FROM subjects WHERE archived = 0")?;
+            let rows = stmt.query_map([], |r| r.get(0))?.collect::<Result<Vec<_>, _>>()?;
+            rows
+        }
+    };
+
+    let mut added = 0;
+    for id in subjects {
+        added += resources::import_topics(&conn, id)?;
+    }
+    Ok(added)
+}
+
+/// Re-run automatic tagging over questions already indexed.
+///
+/// Needed because tagging happens at index time against the topic list as it
+/// was then — and for anyone who indexed before importing topics, that list was
+/// empty. Only touches tags Retain suggested; anything typed by hand is left
+/// alone, because a re-run should never delete your own work.
+#[tauri::command]
+pub fn retag_questions(state: State<'_, AppState>, batch: Option<i64>) -> CmdResult<IndexProgress> {
+    let conn = db(&state);
+    let take = batch.unwrap_or(400).clamp(1, 5000);
+
+    let pending: Vec<(i64, i64, String)> = {
+        let mut stmt = conn.prepare(
+            "SELECT q.id, q.subject_id, q.text FROM questions q
+              WHERE q.subject_id IS NOT NULL
+                AND NOT EXISTS (SELECT 1 FROM question_tags t
+                                 WHERE t.question_id = q.id AND t.source = 'auto')
+              LIMIT ?1",
+        )?;
+        let rows = stmt
+            .query_map([take], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+        rows
+    };
+
+    // Vocabulary once per subject rather than once per question — parsing a
+    // study design a thousand times over would take minutes.
+    let mut vocab: std::collections::HashMap<i64, Vec<resources::TopicVocabulary>> =
+        Default::default();
+    let mut tagged = 0i64;
+
+    for (question_id, subject_id, text) in &pending {
+        let topics = match vocab.get(subject_id) {
+            Some(t) => t,
+            None => {
+                let designs: Vec<String> = {
+                    let mut stmt = conn.prepare(
+                        "SELECT content FROM resources
+                          WHERE subject_id = ?1 AND kind = 'study_design'",
+                    )?;
+                    let rows = stmt
+                        .query_map([subject_id], |r| r.get(0))?
+                        .collect::<Result<Vec<_>, _>>()?;
+                    rows
+                };
+                let built = designs
+                    .iter()
+                    .flat_map(|d| resources::topic_vocabulary(d))
+                    .collect();
+                vocab.entry(*subject_id).or_insert(built)
+            }
+        };
+
+        for tag in questions::auto_tags_by_vocabulary(text, topics) {
+            conn.execute(
+                "INSERT OR IGNORE INTO question_tags (question_id, tag, source)
+                 VALUES (?1, ?2, 'auto')",
+                rusqlite::params![question_id, tag],
+            )?;
+            tagged += 1;
+        }
+    }
+
+    let total: i64 =
+        conn.query_row("SELECT COUNT(DISTINCT question_id) FROM question_tags", [], |r| r.get(0))?;
+
+    Ok(IndexProgress {
+        done: tagged,
+        remaining: pending.len() as i64,
+        questions: total,
+    })
+}

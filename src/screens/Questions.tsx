@@ -42,6 +42,8 @@ export function Questions() {
   const [tags, setTags] = useState<[string, number][]>([]);
   const [indexing, setIndexing] = useState(false);
   const [locating, setLocating] = useState(false);
+  const [tagging, setTagging] = useState(false);
+  const [tagNote, setTagNote] = useState<string | null>(null);
   const [pagesLeft, setPagesLeft] = useState<number | null>(null);
   const [remaining, setRemaining] = useState<number | null>(null);
   const [total, setTotal] = useState(0);
@@ -144,6 +146,38 @@ export function Questions() {
       }
     } finally {
       setLocating(false);
+    }
+  };
+
+  /**
+   * Import topic names, then tag against them.
+   *
+   * Tagging matches a question against the words its topic uses, and those
+   * come from the study design — so importing has to happen first or there is
+   * nothing to match. Doing both behind one button is the only sequence that
+   * makes sense.
+   */
+  const runTagging = async () => {
+    setTagging(true);
+    setTagNote(null);
+    try {
+      const topics = await api.importTopics(null);
+      let tagged = 0;
+      for (;;) {
+        const p = await api.retagQuestions(500);
+        tagged = p.questions;
+        if (p.remaining === 0 || p.done === 0) break;
+      }
+      await loadTags();
+      setTagNote(
+        topics > 0
+          ? `${topics} topics read from your study designs · ${tagged} questions tagged`
+          : `${tagged} questions tagged`,
+      );
+    } catch (e) {
+      setTagNote(String(e));
+    } finally {
+      setTagging(false);
     }
   };
 
@@ -323,6 +357,42 @@ export function Questions() {
           >
             Reset
           </button>
+        </Card>
+      )}
+
+      {/* Tagging needs the study design's vocabulary, and that has to be read
+          out of it first. Shown whenever there are questions, because a screen
+          of untagged ones raises exactly this question. */}
+      {total > 0 && (
+        <Card className="animate-rise mb-4 flex flex-wrap items-center gap-3 p-4">
+          <div className="min-w-0 flex-1">
+            <div className="text-[13.5px] text-[var(--ink)]">
+              {tags.length > 0 ? "Re-tag questions" : "Nothing is tagged yet"}
+            </div>
+            <p className="mt-0.5 text-[12px] leading-relaxed text-[var(--ink-faint)]">
+              Reads the topic names and their vocabulary out of the study
+              designs you've uploaded, then tags questions that use those words.
+              Only touches tags Retain suggested — anything you typed is left
+              alone.
+            </p>
+            {tagNote && (
+              <p className="mt-1 text-[12px] text-[var(--ink-dim)]">
+                {tagNote}
+              </p>
+            )}
+          </div>
+          <Button
+            size="sm"
+            disabled={tagging}
+            onClick={() => void runTagging()}
+          >
+            {tagging ? (
+              <Loader2 size={13} className="animate-spin" />
+            ) : (
+              <Tag size={13} />
+            )}
+            {tagging ? "Working…" : "Tag them"}
+          </Button>
         </Card>
       )}
 

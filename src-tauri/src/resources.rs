@@ -581,5 +581,311 @@ pub fn context_block(excerpts: &[Excerpt]) -> Option<String> {
     Some(out)
 }
 
+// ---------------------------------------------------------------------------
+// Topics, from the study design
+// ---------------------------------------------------------------------------
+
+/// The bullet a study design uses for its dot points.
+///
+/// `U+F0B7`, a private-use character from the Symbol font — which is what the
+/// PDF actually contains, not a real bullet. Extraction preserves it, so it is
+/// the most reliable marker in the document.
+const SD_BULLET: char = '\u{F0B7}';
+
+/// Headings that end a run of key knowledge.
+const SECTION_ENDS: [&str; 6] = [
+    // Any "Key …skills" heading. English and Accounting write "Key skills"
+    // without "science", and it was coming through as a topic.
+    "key skills",
+    "unit ",
+    "area of study",
+    "outcome",
+    "assessment",
+    "detailed study",
+];
+
+/// Pull the topic names out of a study design.
+///
+/// Automatic tagging matches questions against the student's topic list, and
+/// that list was empty — nobody types thirty topic names by hand, so nothing
+/// was ever tagged. The names are sitting in the study design they already
+/// uploaded: VCAA writes a heading above each run of dot points.
+///
+/// ```text
+/// Key knowledge
+///
+/// Cellular structure and function      <- this
+///
+///  cells as the basic structural…    <- dot points
+/// ```
+///
+/// Taken verbatim. These are VCAA's words out of the student's own file, which
+/// is the difference between reading a curriculum and inventing one.
+pub fn topics_from_study_design(content: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut in_key_knowledge = false;
+    // Set by an `Area of Study N` line; the next real line is its title.
+    let mut expect_aos_title = false;
+
+    let lines: Vec<&str> = content.lines().collect();
+    for raw in lines {
+        let line = raw.trim();
+        let lower = line.to_lowercase();
+
+        if lower == "key knowledge" {
+            in_key_knowledge = true;
+            expect_aos_title = false;
+            continue;
+        }
+
+        // Some subjects list dot points straight under Key knowledge with no
+        // headings between — Maths and English do. Their Area of Study titles
+        // are the only topic names the document carries, and they are still
+        // VCAA's own words.
+        if lower.starts_with("area of study") {
+            in_key_knowledge = false;
+            // A contents-page line is padded out with dots to a page number.
+            expect_aos_title = !line.contains("....");
+            continue;
+        }
+        if expect_aos_title {
+            if line.is_empty() {
+                continue;
+            }
+            expect_aos_title = false;
+            let clean = line.trim_end_matches(['.', ':']).trim();
+            let words = clean.split_whitespace().count();
+            if (2..=12).contains(&words)
+                && clean.chars().count() <= 90
+                && clean.chars().next().is_some_and(|c| c.is_alphabetic())
+                && !out.iter().any(|t| t.eq_ignore_ascii_case(clean))
+            {
+                out.push(clean.to_string());
+            }
+            continue;
+        }
+
+        if !in_key_knowledge {
+            continue;
+        }
+
+        // A dot point is the content under a heading, not a heading. Some
+        // subjects nest a second level with a minus or a dash, and those are
+        // dot points too.
+        if line.starts_with(SD_BULLET)
+            || line.starts_with(['•', '\u{2212}', '\u{2013}', '\u{2014}', '-', '*'])
+        {
+            continue;
+        }
+        if line.is_empty() {
+            continue;
+        }
+        if SECTION_ENDS.iter().any(|s| lower.starts_with(s))
+            || (lower.starts_with("key ") && lower.ends_with("skills"))
+        {
+            in_key_knowledge = false;
+            continue;
+        }
+        // Page furniture, which sits between the headings.
+        if lower.contains("study design") || lower.contains("vcaa") || lower.starts_with('©') {
+            continue;
+        }
+        // A heading is a few words. Anything longer is the wrapped tail of a
+        // dot point, whose bullet was on the previous line.
+        let words = line.split_whitespace().count();
+        if !(1..=9).contains(&words) || line.chars().count() > 80 {
+            continue;
+        }
+        // A heading starts with a letter, in upper case. A wrapped tail starts
+        // lower case, or with the bracket it was broken inside.
+        if !line.chars().next().is_some_and(|c| c.is_alphabetic() && c.is_uppercase()) {
+            continue;
+        }
+
+        let clean = line.trim_end_matches(['.', ':']).trim().to_string();
+        if !clean.is_empty() && !out.iter().any(|t| t.eq_ignore_ascii_case(&clean)) {
+            out.push(clean);
+        }
+    }
+
+    out
+}
+
+/// A topic heading together with the words VCAA uses to describe it.
+///
+/// Matching a question against topic *names* barely works: a heading reads
+/// "Cellular structure and function" and the question says "active transport
+/// across the plasma membrane". Measured on the real library, whole-name
+/// matching tagged 37 questions out of 6,529.
+///
+/// The vocabulary is in the dot points underneath each heading, and it is the
+/// vocabulary the exam uses — "osmosis", "chloroplasts", "facilitated
+/// diffusion". Still VCAA's own words out of the student's own file.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TopicVocabulary {
+    pub name: String,
+    /// Distinctive words from the dot points. Lowercased, deduplicated.
+    pub terms: Vec<String>,
+}
+
+/// Words too common to identify anything, even at five letters or more.
+///
+/// Deliberately short. A long stop list starts removing real terms, and the
+/// length filter already excludes most function words.
+const NOT_DISTINCTIVE: [&str; 24] = [
+    "including", "between", "their", "which", "these", "those", "there", "where", "other",
+    "different", "various", "example", "examples", "understanding", "identify", "describe",
+    "explain", "explaining", "involving", "related", "relating", "including", "through",
+    "within",
+];
+
+/// Headings that are about how the subject is assessed, not what it contains.
+///
+/// A study design carries a run of these near the end. "Satisfactory
+/// completion" tagged 5,558 of 6,529 real questions on its first run — its
+/// vocabulary is the generic language of assessment, which every question
+/// shares.
+const ADMINISTRATIVE: [&str; 8] = [
+    "satisfactory completion",
+    "levels of achievement",
+    "school-based assessment",
+    "external assessment",
+    "scope of study",
+    "entry",
+    "duration",
+    "changes to the study design",
+];
+
+/// Headings and their vocabulary, in document order.
+///
+/// Terms shared by most of a subject's topics are dropped afterwards: a word
+/// that appears under every heading distinguishes none of them, and those are
+/// exactly the words administrative sections are made of.
+pub fn topic_vocabulary(content: &str) -> Vec<TopicVocabulary> {
+    let mut out: Vec<TopicVocabulary> = Vec::new();
+    let names = topics_from_study_design(content);
+    if names.is_empty() {
+        return out;
+    }
+
+    // Walk the document again, attributing each line to whichever heading it
+    // last passed. A dot point belongs to the heading above it.
+    let mut current: Option<String> = None;
+    let mut terms: Vec<String> = Vec::new();
+
+    let flush = |out: &mut Vec<TopicVocabulary>, name: Option<String>, terms: &mut Vec<String>| {
+        if let Some(name) = name {
+            terms.sort();
+            terms.dedup();
+            if !terms.is_empty() {
+                out.push(TopicVocabulary { name, terms: std::mem::take(terms) });
+            } else {
+                terms.clear();
+            }
+        }
+    };
+
+    for raw in content.lines() {
+        let line = raw.trim();
+        let clean = line.trim_end_matches(['.', ':']).trim();
+
+        if let Some(name) = names.iter().find(|n| n.as_str() == clean) {
+            flush(&mut out, current.take(), &mut terms);
+            current = Some(name.clone());
+            continue;
+        }
+        if current.is_none() {
+            continue;
+        }
+
+        for word in line.split(|c: char| !c.is_alphanumeric()) {
+            let w = word.to_lowercase();
+            if w.chars().count() >= 5
+                && w.chars().next().is_some_and(|c| c.is_alphabetic())
+                && !NOT_DISTINCTIVE.contains(&w.as_str())
+            {
+                terms.push(w);
+            }
+        }
+    }
+    flush(&mut out, current.take(), &mut terms);
+
+    out.retain(|t| !ADMINISTRATIVE.iter().any(|a| t.name.to_lowercase().starts_with(a)));
+    drop_shared_terms(&mut out);
+    out.retain(|t| t.terms.len() >= 4);
+    out
+}
+
+/// Remove terms that appear under a third or more of the headings.
+///
+/// This is the cheap form of inverse document frequency, and it is what stops
+/// generic vocabulary from tagging everything: "students" and "analysis" sit
+/// under most headings in a study design and identify none of them, while
+/// "chloroplasts" sits under one.
+fn drop_shared_terms(topics: &mut [TopicVocabulary]) {
+    if topics.len() < 3 {
+        return;
+    }
+
+    let mut seen: std::collections::HashMap<&str, usize> = Default::default();
+    for t in topics.iter() {
+        for term in &t.terms {
+            *seen.entry(term.as_str()).or_insert(0) += 1;
+        }
+    }
+
+    // Two headings is enough to disqualify a term. A word that describes two
+    // different topics cannot tell you which one a question belongs to, and
+    // being strict here is what stops the skills sections — whose vocabulary
+    // is the generic language of scientific method — from tagging everything.
+    let common: std::collections::HashSet<String> = seen
+        .into_iter()
+        .filter(|(_, n)| *n >= 2)
+        .map(|(w, _)| w.to_string())
+        .collect();
+
+    for t in topics.iter_mut() {
+        t.terms.retain(|term| !common.contains(term));
+    }
+}
+
+/// Create topics for a subject from its study designs.
+///
+/// Idempotent — a topic that already exists is left alone, so re-running after
+/// uploading a newer study design adds what's new rather than duplicating
+/// everything.
+pub fn import_topics(conn: &Connection, subject_id: i64) -> Result<usize> {
+    let mut stmt = conn.prepare(
+        "SELECT content FROM resources WHERE subject_id = ?1 AND kind = 'study_design'",
+    )?;
+    let designs: Vec<String> = stmt
+        .query_map([subject_id], |r| r.get(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+    drop(stmt);
+
+    let mut added = 0;
+    for (order, name) in designs
+        .iter()
+        .flat_map(|d| topics_from_study_design(d))
+        .enumerate()
+    {
+        let exists: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM topics WHERE subject_id = ?1 AND lower(name) = lower(?2)",
+            rusqlite::params![subject_id, name],
+            |r| r.get(0),
+        )?;
+        if exists > 0 {
+            continue;
+        }
+        conn.execute(
+            "INSERT INTO topics (subject_id, name, kind, sort_order) VALUES (?1, ?2, 'aos', ?3)",
+            rusqlite::params![subject_id, name, order as i64],
+        )?;
+        added += 1;
+    }
+
+    Ok(added)
+}
+
 #[cfg(test)]
 mod tests;

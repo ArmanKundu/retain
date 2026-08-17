@@ -188,3 +188,124 @@ fn segmenting_real_papers_produces_sane_questions() {
 
     assert!(total > 0, "no questions came out of real papers");
 }
+
+/// Pull topics out of the real study designs and report what came back.
+///
+/// Ignored by default; needs `RETAIN_TEST_DB` pointing at a copy. Topic
+/// extraction against a hand-written fixture proves the parser runs, not that
+/// VCAA's actual PDFs are shaped the way the fixture claims.
+#[test]
+#[ignore]
+fn topics_come_out_of_the_real_study_designs() {
+    let Ok(path) = std::env::var("RETAIN_TEST_DB") else {
+        return;
+    };
+    let conn = Connection::open(path).unwrap();
+    conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+    run_migrations(&conn).unwrap();
+
+    let mut stmt = conn
+        .prepare("SELECT id, name FROM subjects WHERE archived = 0 ORDER BY sort_order")
+        .unwrap();
+    let subjects: Vec<(i64, String)> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    drop(stmt);
+
+    for (id, name) in subjects {
+        let added = crate::resources::import_topics(&conn, id).unwrap();
+        let sample: Vec<String> = conn
+            .prepare("SELECT name FROM topics WHERE subject_id = ?1 ORDER BY sort_order LIMIT 4")
+            .unwrap()
+            .query_map([id], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        println!("{name}: {added} topics  {sample:?}");
+    }
+}
+
+/// The whole chain on real data: topics out of the study designs, then tags
+/// onto the questions already indexed.
+#[test]
+#[ignore]
+fn real_questions_get_tagged_once_topics_exist() {
+    let Ok(path) = std::env::var("RETAIN_TEST_DB") else {
+        return;
+    };
+    let conn = Connection::open(path).unwrap();
+    conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+    run_migrations(&conn).unwrap();
+
+    let subjects: Vec<(i64, String)> = conn
+        .prepare("SELECT id, name FROM subjects WHERE archived = 0")
+        .unwrap()
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+
+    for (id, _) in &subjects {
+        crate::resources::import_topics(&conn, *id).unwrap();
+    }
+
+    // Tag every indexed question against its subject's topics.
+    let pending: Vec<(i64, i64, String)> = conn
+        .prepare("SELECT id, subject_id, text FROM questions WHERE subject_id IS NOT NULL")
+        .unwrap()
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+
+    // Vocabulary per subject, built once from its study designs.
+    let mut cache: std::collections::HashMap<i64, Vec<crate::resources::TopicVocabulary>> =
+        Default::default();
+    for (qid, sid, text) in &pending {
+        let topics = cache.entry(*sid).or_insert_with(|| {
+            let designs: Vec<String> = conn
+                .prepare("SELECT content FROM resources WHERE subject_id = ?1 AND kind = 'study_design'")
+                .unwrap()
+                .query_map([sid], |r| r.get(0))
+                .unwrap()
+                .collect::<Result<_, _>>()
+                .unwrap();
+            designs
+                .iter()
+                .flat_map(|d| crate::resources::topic_vocabulary(d))
+                .collect()
+        });
+        for tag in crate::questions::auto_tags_by_vocabulary(text, topics) {
+            conn.execute(
+                "INSERT OR IGNORE INTO question_tags (question_id, tag, source) VALUES (?1,?2,'auto')",
+                rusqlite::params![qid, tag],
+            )
+            .unwrap();
+        }
+    }
+
+    let (tagged, total): (i64, i64) = conn
+        .query_row(
+            "SELECT (SELECT COUNT(DISTINCT question_id) FROM question_tags),
+                    (SELECT COUNT(*) FROM questions)",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    println!("{tagged} of {total} questions tagged");
+
+    let top: Vec<(String, i64)> = conn
+        .prepare("SELECT tag, COUNT(*) FROM question_tags GROUP BY tag ORDER BY COUNT(*) DESC LIMIT 6")
+        .unwrap()
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    for (tag, n) in top {
+        println!("  {n:5}  {tag}");
+    }
+
+    assert!(tagged > 0, "still nothing tagged");
+}

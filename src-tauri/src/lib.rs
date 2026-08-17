@@ -305,6 +305,8 @@ pub fn run() {
             commands::question_facets,
             commands::question_page_image,
             commands::locate_question_pages,
+            commands::import_topics_from_study_design,
+            commands::retag_questions,
             commands::tag_question,
             commands::untag_question,
             commands::index_questions,

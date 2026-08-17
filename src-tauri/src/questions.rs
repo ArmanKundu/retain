@@ -142,37 +142,64 @@ fn push(out: &mut Vec<Parsed>, label: String, number: i64, body: &[&str]) {
     out.push(Parsed { label, number, text });
 }
 
-/// Which of the student's own topic names appear in a question.
+/// How many of a topic's own words a question has to use before it counts.
 ///
-/// The only automatic tagging done, and deliberately so: a built-in keyword
-/// list would mean Retain deciding what counts as a topic in VCE Biology, which
-/// is inventing curriculum. Topic names are the student's own words, or come
-/// from a study design they uploaded, so a match is grounded in something real.
-///
-/// Matched case-insensitively on word boundaries, so a topic called "Cell"
-/// doesn't tag every question containing "excellent".
-///
-/// Singular and plural are treated as the same word. A topic named "Enzymes"
-/// has to match "an enzyme lowers activation energy" or automatic tagging is
-/// useless — that is how the topic list is actually written, and the first
-/// version of this matched literally and tagged nothing at all.
-pub fn auto_tags(text: &str, topics: &[String]) -> Vec<String> {
-    let haystack = text.to_lowercase();
+/// Three, paired with the shared-term filter. Four was measurably purer and
+/// tagged only 5% of the library; three doubles coverage without the skills
+/// sections coming back, because dropping any term shared by two headings has
+/// already stripped their generic vocabulary. The old comment about four: their vocabulary is the
+/// generic language of scientific method — evidence, data, conclusion — and
+/// almost every exam question uses three of those words in passing. Measured
+/// against the real library, four is where a tag starts meaning the question is
+/// actually about that topic.
+const TERMS_TO_MATCH: usize = 3;
 
-    topics
+/// Tag a question by the vocabulary its topics actually use.
+///
+/// Matching against topic *names* is what the first version did, and it tagged
+/// 37 questions out of 6,529 — a heading reads "Cellular structure and
+/// function" while the question says "active transport across the plasma
+/// membrane". The words that connect them are in the study design's dot
+/// points, which is where these come from.
+pub fn auto_tags_by_vocabulary(
+    text: &str,
+    topics: &[crate::resources::TopicVocabulary],
+) -> Vec<String> {
+    let haystack = text.to_lowercase();
+    // Both sides reduced to a singular stem. The study design writes
+    // "inhibitors" and the question writes "inhibitor"; matching them exactly
+    // misses, which is the same failure the name matcher had.
+    //
+    // One pass into a set, rather than scanning the question once per term: a
+    // subject has forty topics and several hundred terms between them.
+    let words: std::collections::HashSet<String> = haystack
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| w.chars().count() >= 5)
+        .map(singular)
+        .collect();
+
+    let mut scored: Vec<(usize, &str)> = topics
         .iter()
-        .filter(|topic| {
-            let stem = singular(&topic.trim().to_lowercase());
-            // Two letters would match half the paper.
-            stem.len() >= 3 && contains_word(&haystack, &stem)
+        .filter_map(|t| {
+            let hits = t
+                .terms
+                .iter()
+                .filter(|term| words.contains(&singular(term)))
+                .count();
+            (hits >= TERMS_TO_MATCH).then_some((hits, t.name.as_str()))
         })
-        .cloned()
-        .collect()
+        .collect();
+
+    // Strongest first, and at most two: a question belongs to one topic, and a
+    // list of six tags is the same as no tags.
+    scored.sort_by(|a, b| b.0.cmp(&a.0));
+    scored.truncate(2);
+    scored.into_iter().map(|(_, name)| name.to_string()).collect()
 }
 
-/// Drop a plural ending, so "enzymes" and "enzyme" are the same needle.
+/// Drop a plural ending, so "enzymes" and "enzyme" are the same word.
 ///
-/// Only the two endings that matter for topic names. Real stemming would also
+/// Only the endings that matter for exam vocabulary. Real stemming would also
 /// turn "mitosis" into "mitosi", which is worse than doing nothing.
 fn singular(word: &str) -> String {
     if let Some(base) = word.strip_suffix("ies") {
@@ -182,28 +209,6 @@ fn singular(word: &str) -> String {
         return word.to_string();
     }
     word.strip_suffix('s').unwrap_or(word).to_string()
-}
-
-/// Whether `stem` appears as a whole word, allowing a plural ending on it.
-fn contains_word(haystack: &str, stem: &str) -> bool {
-    haystack.match_indices(stem).any(|(at, _)| {
-        let before_ok = at == 0
-            || !haystack[..at]
-                .chars()
-                .next_back()
-                .is_some_and(|c| c.is_alphanumeric());
-        if !before_ok {
-            return false;
-        }
-
-        // What follows may end the word, or be the plural of it.
-        let after = &haystack[at + stem.len()..];
-        let rest = after
-            .strip_prefix("es")
-            .or_else(|| after.strip_prefix('s'))
-            .unwrap_or(after);
-        !rest.chars().next().is_some_and(|c| c.is_alphanumeric())
-    })
 }
 
 /// Index one resource, replacing anything already stored for it.
@@ -223,11 +228,19 @@ pub fn index_resource(conn: &mut Connection, resource_id: i64) -> Result<usize> 
         return Ok(0);
     }
 
-    let topics: Vec<String> = match subject_id {
+    // The study design's vocabulary, not its topic names — see
+    // `auto_tags_by_vocabulary` for why matching on names barely works.
+    let topics: Vec<crate::resources::TopicVocabulary> = match subject_id {
         Some(sid) => {
-            let mut stmt = conn.prepare("SELECT name FROM topics WHERE subject_id = ?1")?;
-            let rows = stmt.query_map([sid], |r| r.get(0))?.collect::<Result<Vec<_>, _>>()?;
-            rows
+            let mut stmt = conn.prepare(
+                "SELECT content FROM resources WHERE subject_id = ?1 AND kind = 'study_design'",
+            )?;
+            let designs: Vec<String> =
+                stmt.query_map([sid], |r| r.get(0))?.collect::<Result<Vec<_>, _>>()?;
+            designs
+                .iter()
+                .flat_map(|d| crate::resources::topic_vocabulary(d))
+                .collect()
         }
         None => Vec::new(),
     };
@@ -259,7 +272,7 @@ pub fn index_resource(conn: &mut Connection, resource_id: i64) -> Result<usize> 
             ])?;
             let id = tx.last_insert_rowid();
 
-            for t in auto_tags(&q.text, &topics) {
+            for t in auto_tags_by_vocabulary(&q.text, &topics) {
                 tag.execute(rusqlite::params![id, t])?;
             }
         }

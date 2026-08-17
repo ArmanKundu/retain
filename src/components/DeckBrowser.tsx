@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   ChevronLeft,
+  ListChecks,
   ChevronRight,
   Dumbbell,
   Play,
@@ -30,6 +31,7 @@ import type {
   SubjectMastery,
   TopicMastery,
 } from "../lib/types";
+import { CardManager } from "./CardManager";
 import { Button, Card } from "./ui";
 import { SectionHeader } from "./primitives";
 
@@ -161,6 +163,7 @@ export function DeckBrowser({
         colour={openSubject.colour}
         onBack={() => setDeck(null)}
         onStudy={onStudy}
+        onRefresh={() => void openDeck(deck.target)}
       />
     );
   }
@@ -295,13 +298,17 @@ function DeckDashboard({
   colour,
   onBack,
   onStudy,
+  onRefresh,
 }: {
   target: DeckTarget;
   stats: DeckStats;
   colour: string;
   onBack: () => void;
   onStudy: (target: DeckTarget, mode: "review" | "practice") => void;
+  onRefresh: () => void;
 }) {
+  const [managing, setManaging] = useState(false);
+
   return (
     <section className="animate-rise">
       <button
@@ -383,7 +390,22 @@ function DeckDashboard({
             <Dumbbell size={13} />
             Practice
           </Button>
+
+          <Button size="sm" onClick={() => setManaging((m) => !m)}>
+            <ListChecks size={13} />
+            {managing ? "Hide cards" : `Cards (${stats.total})`}
+          </Button>
         </div>
+
+        {managing && (
+          <div className="animate-rise mt-4 border-t border-[var(--line-soft)] pt-4">
+            <CardManager
+              subjectId={target.subjectId}
+              topicId={target.topicId}
+              onChanged={onRefresh}
+            />
+          </div>
+        )}
 
         <p className="mt-3 text-[11.5px] leading-relaxed text-[var(--ink-faint)]">
           Practice goes through the weakest cards without touching the schedule.

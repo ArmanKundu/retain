@@ -303,6 +303,12 @@ pub fn run() {
             commands::tag_question,
             commands::untag_question,
             commands::index_questions,
+            commands::list_cards,
+            commands::delete_card,
+            commands::suspend_card,
+            commands::edit_card,
+            commands::reset_card,
+            commands::ai_cards_from_material,
             commands::preview_intervals,
             // Resources and the saved-output library.
             commands::list_resources,

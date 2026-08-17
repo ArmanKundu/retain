@@ -92,6 +92,7 @@ import type {
   StickyNote,
   PastQuestion,
   IndexProgress,
+  CardRow,
 } from "./types";
 
 export const api = {
@@ -596,6 +597,24 @@ export const api = {
   /** Cut a batch of papers into questions. Pass 0 to just read progress. */
   indexQuestions: (batch: number) =>
     invoke<IndexProgress>("index_questions", { batch }),
+
+  // -- managing a deck ------------------------------------------------------
+  listCards: (subjectId: number, topicId: number | null) =>
+    invoke<CardRow[]>("list_cards", { subjectId, topicId }),
+  deleteCard: (cardId: number) => invoke<void>("delete_card", { cardId }),
+  suspendCard: (cardId: number, suspended: boolean) =>
+    invoke<void>("suspend_card", { cardId, suspended }),
+  editCard: (cardId: number, front: string, back: string) =>
+    invoke<void>("edit_card", { cardId, front, back }),
+  /** Forget a card's schedule and start it over. The log is kept. */
+  resetCard: (cardId: number) => invoke<void>("reset_card", { cardId }),
+  /** Write cards from your own material. Returns suggestions, writes nothing. */
+  aiCardsFromMaterial: (subjectId: number, topic: string, count: number) =>
+    invoke<CardSuggestion[]>("ai_cards_from_material", {
+      subjectId,
+      topic,
+      count,
+    }),
   conversationMarkdown: (conversationId: number) =>
     invoke<string>("conversation_markdown", { conversationId }),
 

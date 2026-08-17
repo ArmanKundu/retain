@@ -152,6 +152,21 @@ pub fn show_main_window(app: &AppHandle) {
     }
 }
 
+/// A ring that fills over twenty-five minutes, then starts again.
+///
+/// Braille-pattern characters rather than the geometric circles: they render at
+/// a consistent width in the menu bar's proportional font, so the clock beside
+/// them doesn't shift left and right as the ring fills. A title that jitters
+/// once a second is worse than one that says nothing.
+fn ring_glyph(active_seconds: i64) -> &'static str {
+    const CYCLE_SECONDS: i64 = 25 * 60;
+    const STEPS: [&str; 8] = ["⠈", "⠘", "⠸", "⢸", "⣸", "⣼", "⣾", "⣿"];
+
+    let through = (active_seconds.max(0) % CYCLE_SECONDS) as f64 / CYCLE_SECONDS as f64;
+    let step = ((through * STEPS.len() as f64) as usize).min(STEPS.len() - 1);
+    STEPS[step]
+}
+
 /// Push the current timer state into the menu bar. Called once a second.
 pub fn update(handles: &TrayHandles, snapshot: Option<&TimerSnapshot>) {
     match snapshot {
@@ -169,13 +184,21 @@ pub fn update(handles: &TrayHandles, snapshot: Option<&TimerSnapshot>) {
             // Space-separated rather than concatenated — macOS renders the
             // title in a proportional font, and the glyph needs the gap to
             // avoid touching the first digit.
+            // A quarter-filled ring that fills as the session runs, rather
+            // than a dot that only says on or off. Eight steps, because the
+            // menu bar renders one character at about 13pt and any finer a
+            // gradation is invisible at that size.
+            //
+            // The cycle is 25 minutes — not a Pomodoro, which Retain doesn't
+            // have, but the length after which sitting up and looking away is
+            // worth doing. It tells you how long you've been at it without
+            // your having to read the clock.
             let title = match s.paused_reason {
-                Some(PauseReason::Manual) => format!("◦ {clock}"),
-                // Idle and break are still *paused*, but not by you. Same
-                // hollow glyph, because the distinction that matters in the
-                // menu bar is only "is this counting".
-                Some(PauseReason::Idle) | Some(PauseReason::Break) => format!("◦ {clock}"),
-                None => format!("● {clock}"),
+                // Paused reads as an outline whatever the reason. The
+                // distinction that matters at a glance is only "is this
+                // counting"; why it stopped is in the menu you open anyway.
+                Some(_) => format!("○ {clock}"),
+                None => format!("{} {clock}", ring_glyph(s.active_seconds)),
             };
             let _ = handles.icon.set_title(Some(title));
 
@@ -212,5 +235,39 @@ pub fn update(handles: &TrayHandles, snapshot: Option<&TimerSnapshot>) {
             let _ = handles.pause_resume.set_enabled(false);
             let _ = handles.stop.set_enabled(false);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The ring has to actually move, and it has to come back round — a glyph
+    /// that saturates after five minutes stops carrying information for the
+    /// other twenty.
+    #[test]
+    fn the_ring_fills_across_a_cycle_and_restarts() {
+        assert_eq!(ring_glyph(0), "⠈");
+        assert_eq!(ring_glyph(12 * 60 + 30), "⣸", "half way");
+        assert_eq!(ring_glyph(25 * 60 - 1), "⣿", "nearly full");
+
+        // A new cycle looks like the start of one.
+        assert_eq!(ring_glyph(25 * 60), ring_glyph(0));
+        assert_eq!(ring_glyph(50 * 60 + 60), ring_glyph(60));
+    }
+
+    /// The clock beside it must not shift as the ring fills, so every step is
+    /// one character.
+    #[test]
+    fn every_step_is_a_single_character() {
+        for seconds in (0..25 * 60).step_by(37) {
+            assert_eq!(ring_glyph(seconds).chars().count(), 1, "at {seconds}s");
+        }
+    }
+
+    #[test]
+    fn a_negative_clock_does_not_panic() {
+        // Shouldn't happen, but a menu bar update is not worth a crash.
+        assert_eq!(ring_glyph(-5), "⠈");
     }
 }

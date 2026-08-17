@@ -500,6 +500,155 @@ pub fn future_load(conn: &Connection, days: i64) -> anyhow::Result<Vec<(String, 
     Ok(out)
 }
 
+
+// ---------------------------------------------------------------------------
+// Managing a deck
+// ---------------------------------------------------------------------------
+
+/// One card as it appears in a browse list.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CardRow {
+    pub id: i64,
+    pub front: String,
+    pub back: String,
+    pub note_type: String,
+    pub state: String,
+    pub suspended: bool,
+    pub lapses: i64,
+    pub reps: i64,
+    /// Memory strength in days. `None` before the first answer.
+    pub stability: Option<f64>,
+    pub due_on: Option<String>,
+    pub topic_name: Option<String>,
+}
+
+/// Every card in a deck, worst first.
+///
+/// Worst-first because the reason to open a card list is almost always to fix
+/// something: a card you keep failing is badly written more often than it is
+/// badly learnt, and it should be the one you see. Alphabetical would bury it.
+pub fn list(
+    conn: &Connection,
+    subject_id: i64,
+    topic_id: Option<i64>,
+    limit: i64,
+) -> anyhow::Result<Vec<CardRow>> {
+    // Placeholders are positional, so the LIMIT's number moves with the
+    // presence of a topic filter. Hard-coding `?3` for both branches binds two
+    // parameters against three placeholders and fails at runtime rather than
+    // at compile time — which is exactly how it got through the first time.
+    let (scope, limit_ph) = if topic_id.is_some() {
+        ("c.subject_id = ?1 AND c.topic_id = ?2", "?3")
+    } else {
+        ("c.subject_id = ?1", "?2")
+    };
+    let sql = format!(
+        "SELECT c.id, c.front, c.back, c.note_type, c.state, c.suspended,
+                c.lapses, c.reps, c.stability, c.due_on, t.name
+           FROM cards c LEFT JOIN topics t ON t.id = c.topic_id
+          WHERE {scope}
+          ORDER BY c.lapses DESC, COALESCE(c.stability, 0) ASC, c.id
+          LIMIT {limit_ph}"
+    );
+
+    let read = |r: &rusqlite::Row<'_>| -> rusqlite::Result<CardRow> {
+        Ok(CardRow {
+            id: r.get(0)?,
+            front: r.get(1)?,
+            back: r.get(2)?,
+            note_type: r.get(3)?,
+            state: r.get(4)?,
+            suspended: r.get::<_, i64>(5)? == 1,
+            lapses: r.get(6)?,
+            reps: r.get(7)?,
+            stability: r.get(8)?,
+            due_on: r.get(9)?,
+            topic_name: r.get(10)?,
+        })
+    };
+
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = match topic_id {
+        Some(t) => stmt
+            .query_map(rusqlite::params![subject_id, t, limit], read)?
+            .collect::<Result<Vec<_>, _>>()?,
+        None => stmt
+            .query_map(rusqlite::params![subject_id, limit], read)?
+            .collect::<Result<Vec<_>, _>>()?,
+    };
+    Ok(rows)
+}
+
+/// Delete a card outright.
+///
+/// Its review history goes too. `review_log` rows are keyed on `item_id` with
+/// no foreign key — they're an audit trail the streak reads, and leaving them
+/// behind would let a deleted card keep propping up a streak day. They're
+/// removed explicitly because SQLite can't cascade what isn't declared.
+pub fn delete(conn: &Connection, card_id: i64) -> anyhow::Result<()> {
+    conn.execute(
+        "DELETE FROM review_log WHERE item_type = 'card' AND item_id = ?1",
+        [card_id],
+    )?;
+    conn.execute("DELETE FROM cards WHERE id = ?1", [card_id])?;
+    Ok(())
+}
+
+/// Take a card out of rotation without losing it.
+///
+/// The right answer for a card you can't fix right now: deleting loses the
+/// history and the wording, and leaving it in means meeting it every day.
+pub fn set_suspended(conn: &Connection, card_id: i64, suspended: bool) -> anyhow::Result<()> {
+    conn.execute(
+        "UPDATE cards SET suspended = ?2 WHERE id = ?1",
+        rusqlite::params![card_id, suspended as i64],
+    )?;
+    Ok(())
+}
+
+/// Rewrite a card's text.
+///
+/// Scheduling state is untouched. A reworded card is the same card — you still
+/// know roughly as much as you did — and resetting its interval would punish
+/// you for improving it, which is exactly backwards for a leech.
+pub fn edit(conn: &Connection, card_id: i64, front: &str, back: &str) -> anyhow::Result<()> {
+    let front = front.trim();
+    let back = back.trim();
+    if front.is_empty() || back.is_empty() {
+        return Err(anyhow::anyhow!("A card needs both sides."));
+    }
+
+    conn.execute(
+        "UPDATE cards SET front = ?2, back = ?3, content_hash = ?4 WHERE id = ?1",
+        rusqlite::params![
+            card_id,
+            front,
+            back,
+            // Kept in step so a later re-import doesn't see the original text
+            // as a new card and add a duplicate beside the edited one.
+            anki_import::content_hash(front, back, None),
+        ],
+    )?;
+    Ok(())
+}
+
+/// Forget a card's history and start it over.
+///
+/// For a card that is genuinely lost — twelve lapses and no sign of sticking.
+/// Its history stays in `review_log` because that record is about what you did,
+/// which is still true; only the scheduling is reset.
+pub fn reset(conn: &Connection, card_id: i64) -> anyhow::Result<()> {
+    conn.execute(
+        "UPDATE cards SET state = 'new', stability = NULL, difficulty = NULL,
+                due_at = NULL, due_on = NULL, last_review_at = NULL,
+                reps = 0, lapses = 0, learning_step = 0, introduced_on = NULL
+          WHERE id = ?1",
+        [card_id],
+    )?;
+    Ok(())
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
@@ -508,8 +657,9 @@ pub(crate) mod tests {
     pub(crate) fn db() -> Connection {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
-        conn.execute_batch(include_str!("db/migrations/001_init.sql")).unwrap();
-        conn.execute_batch(include_str!("db/migrations/002_capture_cards_errors.sql")).unwrap();
+        // The real chain, not a hand-picked subset — a fixture that drifts
+        // from production tests the fixture.
+        crate::db::run_migrations(&conn).unwrap();
         conn.execute(
             "INSERT INTO subjects (id,name,colour,unit_level,subject_type,sort_order,created_at)
              VALUES (1,'Biology','#4BA97B','3_4','science',0,'2026-08-12T00:00:00Z'),
@@ -1072,6 +1222,135 @@ pub(crate) mod tests {
         assert_eq!(load.len(), 30);
         assert!(load.iter().map(|(_, n)| n).sum::<i64>() >= 3);
     }
+
+    // -- managing a deck ----------------------------------------------------
+
+    fn log_count(conn: &Connection, card: i64) -> i64 {
+        conn.query_row(
+            "SELECT COUNT(*) FROM review_log WHERE item_type = 'card' AND item_id = ?1",
+            [card],
+            |r| r.get(0),
+        )
+        .unwrap()
+    }
+
+    /// A card you keep failing is badly written more often than badly learnt,
+    /// so it's the one you should see first when you open the list.
+    #[test]
+    fn the_card_list_puts_the_worst_first() {
+        let conn = db();
+        add_cards(&conn, 1, 3);
+        conn.execute("UPDATE cards SET lapses = 9, stability = 1.0 WHERE id = 2", []).unwrap();
+        conn.execute("UPDATE cards SET lapses = 0, stability = 40.0 WHERE id = 1", []).unwrap();
+
+        let rows = list(&conn, 1, None, 50).unwrap();
+        assert_eq!(rows[0].id, 2, "nine lapses leads");
+        assert_eq!(rows.last().unwrap().id, 1, "the solid one is last");
+    }
+
+    /// The streak reads `review_log` by `item_id` with no foreign key. Leaving
+    /// the rows behind would let a deleted card keep propping up a streak day.
+    #[test]
+    fn deleting_a_card_takes_its_review_history_with_it() {
+        let conn = db();
+        add_cards(&conn, 1, 1);
+        answer(&conn, 1, Rating::Good, now(), now()).unwrap();
+
+        assert_eq!(log_count(&conn, 1), 1);
+        delete(&conn, 1).unwrap();
+
+        let cards: i64 = conn.query_row("SELECT COUNT(*) FROM cards", [], |r| r.get(0)).unwrap();
+        assert_eq!(cards, 0);
+        assert_eq!(log_count(&conn, 1), 0, "an orphan would still count toward a streak");
+    }
+
+    #[test]
+    fn a_suspended_card_stops_appearing_in_the_queue() {
+        let conn = db();
+        add_cards(&conn, 1, 2);
+
+        set_suspended(&conn, 1, true).unwrap();
+        let ids: Vec<i64> = queue(&conn, None, 50).unwrap().iter().map(|q| q.card_id).collect();
+        assert!(!ids.contains(&1));
+        assert!(ids.contains(&2));
+
+        set_suspended(&conn, 1, false).unwrap();
+        let back: Vec<i64> = queue(&conn, None, 50).unwrap().iter().map(|q| q.card_id).collect();
+        assert!(back.contains(&1));
+    }
+
+    /// A reworded card is the same card. Resetting its interval would punish
+    /// you for improving it, which is backwards for the leeches you'd edit.
+    #[test]
+    fn editing_a_card_keeps_its_schedule() {
+        let conn = db();
+        add_cards(&conn, 1, 1);
+        answer(&conn, 1, Rating::Good, now(), now()).unwrap();
+
+        let before: (Option<f64>, i64) = conn
+            .query_row("SELECT stability, reps FROM cards WHERE id = 1", [], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
+            .unwrap();
+
+        edit(&conn, 1, "  New front  ", "New back").unwrap();
+
+        let after: (String, Option<f64>, i64) = conn
+            .query_row("SELECT front, stability, reps FROM cards WHERE id = 1", [], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+            })
+            .unwrap();
+
+        assert_eq!(after.0, "New front", "trimmed");
+        assert_eq!(after.1, before.0, "stability untouched");
+        assert_eq!(after.2, before.1);
+    }
+
+    /// So a later re-import doesn't see the original wording as a new card and
+    /// add a duplicate beside the edited one.
+    #[test]
+    fn editing_updates_the_hash_used_to_spot_duplicates() {
+        let conn = db();
+        add_cards(&conn, 1, 1);
+        let before: String = conn
+            .query_row("SELECT content_hash FROM cards WHERE id = 1", [], |r| r.get(0))
+            .unwrap();
+
+        edit(&conn, 1, "Changed", "Also changed").unwrap();
+
+        let after: String = conn
+            .query_row("SELECT content_hash FROM cards WHERE id = 1", [], |r| r.get(0))
+            .unwrap();
+        assert_ne!(before, after);
+    }
+
+    #[test]
+    fn a_card_cannot_be_edited_into_having_no_sides() {
+        let conn = db();
+        add_cards(&conn, 1, 1);
+
+        assert!(edit(&conn, 1, "", "back").is_err());
+        assert!(edit(&conn, 1, "front", "   ").is_err());
+    }
+
+    /// Resetting is for a card that's genuinely lost. What you *did* is still
+    /// true, so the log stays; only the scheduling goes.
+    #[test]
+    fn resetting_clears_the_schedule_but_not_the_record() {
+        let conn = db();
+        add_cards(&conn, 1, 1);
+        answer(&conn, 1, Rating::Again, now(), now()).unwrap();
+        answer(&conn, 1, Rating::Good, now(), now()).unwrap();
+
+        reset(&conn, 1).unwrap();
+
+        let row = &list(&conn, 1, None, 10).unwrap()[0];
+        assert_eq!(row.state, "new");
+        assert_eq!(row.reps, 0);
+        assert_eq!(row.stability, None);
+        assert_eq!(log_count(&conn, 1), 2, "what you did is still what you did");
+    }
+
 }
 
 /// What each rating would do to this card, without recording anything.

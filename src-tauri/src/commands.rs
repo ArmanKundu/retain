@@ -3013,3 +3013,87 @@ pub fn index_questions(state: State<'_, AppState>, batch: Option<i64>) -> CmdRes
         questions: total,
     })
 }
+
+// ---------------------------------------------------------------------------
+// Managing a deck
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn list_cards(
+    state: State<'_, AppState>,
+    subject_id: i64,
+    topic_id: Option<i64>,
+) -> CmdResult<Vec<cards::CardRow>> {
+    Ok(cards::list(&db(&state), subject_id, topic_id, 500)?)
+}
+
+#[tauri::command]
+pub fn delete_card(state: State<'_, AppState>, card_id: i64) -> CmdResult<()> {
+    Ok(cards::delete(&db(&state), card_id)?)
+}
+
+#[tauri::command]
+pub fn suspend_card(state: State<'_, AppState>, card_id: i64, suspended: bool) -> CmdResult<()> {
+    Ok(cards::set_suspended(&db(&state), card_id, suspended)?)
+}
+
+#[tauri::command]
+pub fn edit_card(
+    state: State<'_, AppState>,
+    card_id: i64,
+    front: String,
+    back: String,
+) -> CmdResult<()> {
+    Ok(cards::edit(&db(&state), card_id, &front, &back)?)
+}
+
+#[tauri::command]
+pub fn reset_card(state: State<'_, AppState>, card_id: i64) -> CmdResult<()> {
+    Ok(cards::reset(&db(&state), card_id)?)
+}
+
+/// Write cards for a deck from the student's own material.
+///
+/// Retrieval first, then generation. `ai_cards_from_notes` already existed but
+/// only took text you pasted in — which meant the one place with a thousand
+/// documents in it couldn't feed the one feature that wants them.
+///
+/// Nothing is written to the deck here. The suggestions come back for you to
+/// look at, because a model that silently fills your deck is a model whose
+/// mistakes you inherit and then revise from for a year.
+#[tauri::command]
+pub async fn ai_cards_from_material(
+    state: State<'_, AppState>,
+    subject_id: i64,
+    topic: String,
+    count: usize,
+) -> CmdResult<Vec<ai::CardSuggestion>> {
+    let (client, subject_name, context) = {
+        let conn = state.db.lock().expect("database mutex poisoned");
+
+        let subject_name: String = conn
+            .query_row("SELECT name FROM subjects WHERE id = ?1", [subject_id], |r| r.get(0))
+            .map_err(|_| CommandError("That subject no longer exists.".into()))?;
+
+        let excerpts = resources::by_authority(
+            resources::search(&conn, &topic, Some(subject_id), 8).unwrap_or_default(),
+        );
+        if excerpts.is_empty() {
+            return Err(CommandError(format!(
+                "Nothing in your {subject_name} material mentions \"{topic}\". \
+                 Cards written from nothing would be the model's guess at the course."
+            )));
+        }
+
+        // `context_block` returns None only for an empty slice, which the
+        // check above has already ruled out.
+        let context = resources::context_block(&excerpts)
+            .ok_or_else(|| CommandError("Couldn't assemble the material.".into()))?;
+
+        (ai::Ai::from(&conn)?, subject_name, context)
+    };
+
+    Ok(client
+        .cards_from_notes(&context, &subject_name, count.clamp(1, 40))
+        .await?)
+}

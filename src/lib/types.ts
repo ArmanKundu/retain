@@ -1041,3 +1041,19 @@ export interface IndexProgress {
   remaining: number;
   questions: number;
 }
+
+/** One card in a deck list. */
+export interface CardRow {
+  id: number;
+  front: string;
+  back: string;
+  noteType: string;
+  state: string;
+  suspended: boolean;
+  lapses: number;
+  reps: number;
+  /** Memory strength in days. Null before the first answer. */
+  stability: number | null;
+  dueOn: string | null;
+  topicName: string | null;
+}

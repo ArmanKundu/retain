@@ -37,6 +37,7 @@ import { cx } from "./components/ui";
 import { isBiologyThreeFour } from "./lib/catalogue";
 import { clock } from "./lib/format";
 import type { FinishedSession, TimerSnapshot } from "./lib/types";
+import { api } from "./lib/api";
 import { useApp, type Route } from "./store";
 
 type NavItem = {
@@ -102,6 +103,33 @@ export default function App() {
   const [justFinished, setJustFinished] = useState<FinishedSession | null>(
     null,
   );
+
+  // Menu selections. Navigation is decided here rather than in Rust — the
+  // router is React's, and a second copy of which screens exist would be one
+  // more thing to keep in step with the sidebar.
+  useEffect(() => {
+    const un = listen<string>("menu", (event) => {
+      const id = event.payload;
+      if (id.startsWith("go:")) {
+        setRoute(id.slice(3) as Route);
+        return;
+      }
+      // ⌘P prints whatever is on screen, through the page stylesheet.
+      if (id === "print") window.print();
+      if (id === "new:note") setRoute("notes");
+      if (id === "export") setRoute("settings");
+      if (id === "help:updates") setRoute("settings");
+      if (id === "timer:toggle")
+        void api
+          .pauseTimer()
+          .then(setTimer)
+          .catch(() => {});
+      if (id === "timer:stop") setRoute("timer");
+    });
+    return () => {
+      void un.then((f) => f());
+    };
+  }, [setRoute, setTimer]);
 
   useEffect(() => {
     void init();

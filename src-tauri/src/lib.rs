@@ -24,6 +24,7 @@ mod library;
 mod anki_import;
 mod assessments;
 mod assistant;
+mod appmenu;
 mod capture;
 mod cards;
 mod scheduler;
@@ -72,6 +73,8 @@ pub fn run() {
         // Bridges macOS UNUserNotificationCenter. Onboarding screen 3 requests
         // permission through this; Pomodoro phase changes use it here.
         .plugin(tauri_plugin_notification::init())
+        .menu(appmenu::build)
+        .on_menu_event(|app, event| appmenu::on_event(app, event.id().as_ref()))
         .setup(|app| {
             let handle = app.handle().clone();
 
@@ -438,6 +441,19 @@ fn dismiss_main_window(window: &tauri::Window) {
             let _ = window.app_handle().hide();
         }
     });
+}
+
+/// The File > Quick Capture item.
+///
+/// Generic over the runtime because the menu handler is, and the concrete
+/// `Wry` type isn't nameable from there without threading it through.
+pub fn show_capture_from_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    use tauri::Manager;
+    if let Some(window) = app.get_webview_window("capture") {
+        let _ = window.show();
+        let _ = window.set_focus();
+        let _ = app.emit_to("capture", "capture:opened", ());
+    }
 }
 
 /// Show the capture window, or hide it if it's already up.

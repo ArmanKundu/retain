@@ -2780,7 +2780,10 @@ pub fn note_markdown(state: State<'_, AppState>, id: i64) -> CmdResult<String> {
 /// Separate from the command so launch can restore several without going
 /// through the frontend — the stickies have to be back on screen before any UI
 /// exists to ask for them.
-pub fn spawn_sticky(app: &AppHandle, s: &notes::Sticky) -> Result<(), String> {
+pub fn spawn_sticky<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    s: &notes::Sticky,
+) -> Result<(), String> {
     let label = format!("sticky-{}", s.note_id);
 
     // Already up. Focus it rather than making a second window for one note,
@@ -2797,8 +2800,11 @@ pub fn spawn_sticky(app: &AppHandle, s: &notes::Sticky) -> Result<(), String> {
         tauri::WebviewUrl::App("index.html".into()),
     )
     .title(&s.title)
-    .inner_size(s.w.unwrap_or(300.0), s.h.unwrap_or(240.0))
-    .min_inner_size(200.0, 140.0)
+    // Smaller than it was. A sticky opening at 300x240 with two lines in it
+    // reads as an empty slab; this is about the size of a real one, and it
+    // grows as you drag it.
+    .inner_size(s.w.unwrap_or(252.0), s.h.unwrap_or(196.0))
+    .min_inner_size(180.0, 110.0)
     .decorations(false)
     .transparent(true)
     .always_on_top(true)
@@ -2815,7 +2821,7 @@ pub fn spawn_sticky(app: &AppHandle, s: &notes::Sticky) -> Result<(), String> {
         _ => builder.position(80.0 + (s.note_id % 7) as f64 * 26.0, 90.0 + (s.note_id % 7) as f64 * 22.0),
     };
 
-    builder.build().map_err(|e: tauri::Error| e.to_string())?;
+    builder.build().map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -2887,6 +2893,27 @@ pub fn get_sticky(state: State<'_, AppState>, note_id: i64) -> CmdResult<notes::
 ///
 /// The tray handler has an `AppHandle` and no `State`, so it resolves the state
 /// itself rather than duplicating the command.
+/// As `tray_new_sticky`, generic over the runtime for the menu handler.
+pub fn tray_new_sticky_generic<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    let sticky = {
+        let state: tauri::State<'_, AppState> = app.state();
+        let conn = state.db.lock().expect("database mutex poisoned");
+        match notes::create(&conn, None, "", None, chrono::Utc::now())
+            .and_then(|id| notes::set_sticky_open(&conn, id, true).map(|()| id))
+            .and_then(|id| notes::sticky(&conn, id))
+        {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[retain] couldn't make a sticky: {e}");
+                return;
+            }
+        }
+    };
+    if let Err(e) = spawn_sticky(app, &sticky) {
+        eprintln!("[retain] couldn't open the sticky: {e}");
+    }
+}
+
 pub fn tray_new_sticky(app: &AppHandle) {
     let sticky = {
         let state: State<'_, AppState> = app.state();

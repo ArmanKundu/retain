@@ -13,7 +13,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Check, Palette, Plus, X } from "lucide-react";
+import { Check, Plus, X } from "lucide-react";
 
 import { InlineText } from "../components/InlineText";
 import { cx } from "../components/ui";
@@ -30,10 +30,14 @@ import type { Note, NoteBlock } from "../lib/types";
  */
 const PAPER_NAMES = ["amber", "rose", "mint", "sky", "lilac", "slate"] as const;
 
+/** The token stem for a colour name, falling back rather than producing
+ *  `var(--paper-undefined)` if a stored value ever goes bad. */
+function paperKey(name: string): string {
+  return (PAPER_NAMES as readonly string[]).includes(name) ? name : "amber";
+}
+
 function paperOf(name: string) {
-  const key = (PAPER_NAMES as readonly string[]).includes(name)
-    ? name
-    : "amber";
+  const key = paperKey(name);
   return {
     bg: `rgb(var(--paper-${key}) / 0.93)`,
     edge: `rgb(var(--paper-${key}-ink) / 0.28)`,
@@ -160,6 +164,7 @@ export function Sticky({ noteId }: { noteId: number }) {
   };
 
   const paper = paperOf(colour);
+  const key = paperKey(colour);
 
   if (!note) return null;
 
@@ -169,57 +174,92 @@ export function Sticky({ noteId }: { noteId: number }) {
     // is one that needs a title bar.
     <div
       data-tauri-drag-region
-      className="group flex h-screen w-screen flex-col overflow-hidden rounded-[var(--r-lg)] p-3"
+      className="group flex h-screen w-screen flex-col overflow-hidden rounded-[var(--r-md)]"
       style={{
-        background: paper.bg,
+        // A flat fill reads as a coloured rectangle. Real paper is lit from
+        // above, so the top is a touch brighter and the bottom a touch deeper —
+        // barely perceptible on its own, and the whole difference between an
+        // object sitting on the desktop and a div.
+        background: `linear-gradient(178deg,
+          rgb(var(--paper-${key}) / 0.97) 0%,
+          rgb(var(--paper-${key}) / 0.93) 45%,
+          rgb(var(--paper-${key}) / 0.90) 100%)`,
         color: paper.ink,
-        border: `1px solid ${paper.edge}`,
-        boxShadow:
-          "0 12px 34px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.4)",
-        backdropFilter: "blur(20px)",
+        border: `0.5px solid ${paper.edge}`,
+        boxShadow: `
+          0 1px 2px rgba(0,0,0,0.14),
+          0 10px 28px -6px rgba(0,0,0,0.30),
+          inset 0 1px 0 rgba(255,255,255,0.55),
+          inset 0 -1px 0 rgba(0,0,0,0.05)`,
       }}
     >
-      {/* Controls appear on hover. At rest a sticky is paper with writing on
-          it, which is the entire brief. */}
+      {/* A real header strip, present at rest.
+          The previous version showed nothing until you hovered, which made a
+          sticky read as a blank coloured rectangle — the exact thing that makes
+          Apple's look cheap. The strip is a shade of the paper rather than a
+          separate colour, so it belongs to the note instead of sitting on it,
+          and it doubles as the drag handle and the resize-safe top edge. */}
       <div
         data-tauri-drag-region
-        className="mb-1 flex h-5 shrink-0 items-center gap-1 opacity-0 transition-opacity duration-[var(--t-fast)] group-hover:opacity-100"
+        className="flex h-[26px] shrink-0 items-center gap-1.5 px-2.5"
+        style={{
+          background: `rgb(var(--paper-${key}-ink) / 0.055)`,
+          borderBottom: `0.5px solid rgb(var(--paper-${key}-ink) / 0.10)`,
+        }}
       >
         <button
           onClick={() => setPicking((p) => !p)}
           title="Paper colour"
           aria-label="Paper colour"
-          className="rounded-full p-1 hover:bg-black/8"
-          style={{ color: paper.ink }}
-        >
-          <Palette size={12} />
-        </button>
+          className="h-[9px] w-[9px] shrink-0 rounded-full transition-transform duration-[var(--t-fast)] hover:scale-125"
+          style={{
+            background: `rgb(var(--paper-${key}-ink) / 0.42)`,
+            boxShadow: "inset 0 0.5px 0 rgba(255,255,255,0.4)",
+          }}
+        />
 
-        <button
-          onClick={() =>
-            void addBelow(blocks[blocks.length - 1].id, "paragraph")
-          }
-          title="Add a line"
-          aria-label="Add a line"
-          className="rounded-full p-1 hover:bg-black/8"
-          style={{ color: paper.ink }}
+        {/* The first line, echoed. A pile of stickies with no titles is a pile
+            you have to read one by one. */}
+        <span
+          data-tauri-drag-region
+          className="min-w-0 flex-1 truncate text-[11px] font-medium tracking-[-0.005em]"
+          style={{ color: `rgb(var(--paper-${key}-ink) / 0.62)` }}
         >
-          <Plus size={12} />
-        </button>
+          {blocks.find((b) => b.text.trim())?.text.trim() || "New note"}
+        </span>
 
-        <button
-          onClick={() => void api.closeSticky(noteId)}
-          title="Put it away — the note is kept"
-          aria-label="Close"
-          className="ml-auto rounded-full p-1 hover:bg-black/8"
-          style={{ color: paper.ink }}
-        >
-          <X size={12} />
-        </button>
+        {/* Quiet until hover — these are for when you already want them. */}
+        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-[var(--t-fast)] group-hover:opacity-100">
+          <button
+            onClick={() =>
+              void addBelow(blocks[blocks.length - 1].id, "paragraph")
+            }
+            title="Add a line"
+            aria-label="Add a line"
+            className="rounded-[var(--r-xs)] p-[3px] hover:bg-black/10"
+            style={{ color: `rgb(var(--paper-${key}-ink) / 0.55)` }}
+          >
+            <Plus size={11} />
+          </button>
+          <button
+            onClick={() => void api.closeSticky(noteId)}
+            title="Put it away — the note is kept"
+            aria-label="Close"
+            className="rounded-[var(--r-xs)] p-[3px] hover:bg-black/10"
+            style={{ color: `rgb(var(--paper-${key}-ink) / 0.55)` }}
+          >
+            <X size={11} />
+          </button>
+        </div>
       </div>
 
       {picking && (
-        <div className="mb-2 flex shrink-0 gap-1.5">
+        <div
+          className="flex shrink-0 gap-2 px-2.5 py-2"
+          style={{
+            borderBottom: `0.5px solid rgb(var(--paper-${key}-ink) / 0.10)`,
+          }}
+        >
           {PAPER_NAMES.map((name) => (
             <button
               key={name}
@@ -229,17 +269,26 @@ export function Sticky({ noteId }: { noteId: number }) {
                 await api.setStickyColour(noteId, name);
               }}
               aria-label={name}
-              className="h-4 w-4 rounded-full border"
+              className={cx(
+                "h-[15px] w-[15px] rounded-full border transition-transform duration-[var(--t-fast)] hover:scale-110",
+                name === colour && "ring-[1.5px] ring-offset-1",
+              )}
               style={{
                 background: paperOf(name).bg,
                 borderColor: paperOf(name).edge,
+                ...(name === colour
+                  ? ({
+                      "--tw-ring-color": paper.ink,
+                      "--tw-ring-offset-color": "transparent",
+                    } as React.CSSProperties)
+                  : {}),
               }}
             />
           ))}
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2.5">
         {blocks.map((block, i) => (
           <StickyLine
             key={block.id}

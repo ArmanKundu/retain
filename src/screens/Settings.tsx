@@ -1,5 +1,16 @@
 import { useEffect, useRef, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import {
+  Bell,
+  BookOpen,
+  CalendarDays,
+  Database,
+  Info,
+  Palette,
+  Plus,
+  Sparkles,
+  Timer,
+  Trash2,
+} from "lucide-react";
 
 import { ApiKeyField } from "../components/ApiKeyField";
 import { useAi } from "../components/Ai";
@@ -24,7 +35,15 @@ import type {
   SubjectType,
   UnitLevel,
 } from "../lib/types";
-import { Button, Card, ColourDot, Segmented, SectionTitle, Toggle, cx } from "../components/ui";
+import {
+  Button,
+  Card,
+  ColourDot,
+  Segmented,
+  SectionTitle,
+  Toggle,
+  cx,
+} from "../components/ui";
 import { useApp } from "../store";
 
 const PROVIDERS: { value: Provider; label: string }[] = [
@@ -34,76 +53,202 @@ const PROVIDERS: { value: Provider; label: string }[] = [
   { value: "open_router", label: "OpenRouter" },
 ];
 
+/**
+ * Settings.
+ *
+ * This was one column of eight stacked sections, about four screens tall. The
+ * problem with that isn't ugliness, it's that you cannot answer "where is the
+ * notification setting" without scrolling and reading — a settings page you
+ * have to search through is one you avoid, so the things in it never get
+ * changed.
+ *
+ * Two panes now: the sections on the left, one of them on the right. Same
+ * sections, same components; only the shell changed. It's how macOS System
+ * Settings works and it's right for the same reason — the list of what's
+ * configurable is itself the most useful thing on the page.
+ */
+
+const SECTIONS = [
+  {
+    id: "subjects",
+    label: "Subjects",
+    Icon: BookOpen,
+    blurb: "What you study",
+  },
+  {
+    id: "studying",
+    label: "Studying",
+    Icon: Timer,
+    blurb: "Sessions and rest days",
+  },
+  {
+    id: "notifications",
+    label: "Notifications",
+    Icon: Bell,
+    blurb: "When Retain speaks up",
+  },
+  { id: "ai", label: "AI", Icon: Sparkles, blurb: "Provider, model and key" },
+  {
+    id: "calendar",
+    label: "Calendar",
+    Icon: CalendarDays,
+    blurb: "Your Compass feed",
+  },
+  { id: "appearance", label: "Appearance", Icon: Palette, blurb: "Theme" },
+  {
+    id: "data",
+    label: "Data",
+    Icon: Database,
+    blurb: "Export, import, where it lives",
+  },
+  { id: "about", label: "About", Icon: Info, blurb: "Version and updates" },
+] as const;
+
+type SectionId = (typeof SECTIONS)[number]["id"];
+
 export function Settings() {
-  const { boot, subjects, streak, refreshSubjects, refreshProgress, setTheme, init } = useApp();
+  const {
+    boot,
+    subjects,
+    streak,
+    refreshSubjects,
+    refreshProgress,
+    setTheme,
+    init,
+  } = useApp();
+  const [open, setOpen] = useState<SectionId>("subjects");
+
+  const onSubjectsChange = async () => {
+    await refreshSubjects();
+    await refreshProgress();
+  };
 
   return (
-    <div className="mx-auto w-full max-w-[min(820px,100%)] px-6 sm:px-9 pb-16">
+    <div className="mx-auto w-full max-w-[min(1080px,100%)] px-6 pb-16 sm:px-9">
       <div className="titlebar-drag h-11" />
 
-      <header className="animate-in mb-7">
-        <h1 className="text-[28px] font-semibold tracking-[-0.028em]">Settings</h1>
+      <header className="animate-rise mb-6">
+        <h1 className="text-[28px] font-semibold tracking-[-0.028em]">
+          Settings
+        </h1>
       </header>
 
-      <div className="space-y-9">
-        <SubjectsSection subjects={subjects} onChange={async () => {
-          await refreshSubjects();
-          await refreshProgress();
-        }} />
+      <div className="flex flex-col gap-7 md:flex-row md:gap-8">
+        {/* The list of what's configurable, which is itself the useful part. */}
+        <nav className="shrink-0 md:w-[212px]">
+          <div className="flex gap-1.5 overflow-x-auto pb-1 md:flex-col md:overflow-visible md:pb-0">
+            {SECTIONS.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => setOpen(s.id)}
+                aria-current={open === s.id}
+                className={cx(
+                  "flex shrink-0 items-center gap-2.5 rounded-[var(--r-md)] px-3 py-2 text-left transition-colors duration-[var(--t-fast)] md:w-full",
+                  open === s.id
+                    ? "bg-[var(--surface-hi)] text-[var(--ink)]"
+                    : "text-[var(--ink-dim)] hover:bg-[var(--surface)] hover:text-[var(--ink)]",
+                )}
+              >
+                <s.Icon
+                  size={14}
+                  className={cx(
+                    "shrink-0",
+                    open === s.id
+                      ? "text-[var(--accent)]"
+                      : "text-[var(--ink-faint)]",
+                  )}
+                />
+                <span className="min-w-0">
+                  <span className="block truncate text-[13.5px]">
+                    {s.label}
+                  </span>
+                  {/* Hidden on the horizontal layout, where there's no room and
+                      the label alone is enough. */}
+                  <span className="hidden truncate text-[11.5px] text-[var(--ink-faint)] md:block">
+                    {s.blurb}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </nav>
 
-        <StudyingSection
-          threshold={streak?.thresholdMinutes ?? boot?.focusedSessionMinutes ?? 20}
-          restDays={streak?.restDays ?? []}
-          onChange={async () => {
-            await init();
-            await refreshProgress();
-          }}
-        />
+        <main className="animate-rise min-w-0 flex-1">
+          {open === "subjects" && (
+            <SubjectsSection subjects={subjects} onChange={onSubjectsChange} />
+          )}
 
-        <NotificationsSection />
+          {open === "studying" && (
+            <StudyingSection
+              threshold={
+                streak?.thresholdMinutes ?? boot?.focusedSessionMinutes ?? 20
+              }
+              restDays={streak?.restDays ?? []}
+              onChange={async () => {
+                await init();
+                await refreshProgress();
+              }}
+            />
+          )}
 
-        <AiSection />
-
-        <CalendarSection />
-
-        <section>
-          <SectionTitle>Appearance</SectionTitle>
-          <Card className="mt-2.5 p-5">
-            <div className="flex items-center justify-between">
-              <span className="text-[14px]">Theme</span>
-              <Segmented
-                size="sm"
-                value={boot?.theme === "light" ? "light" : "dark"}
-                onChange={(v) => void setTheme(v)}
-                options={[
-                  { value: "dark", label: "Dark" },
-                  { value: "light", label: "Light" },
-                ]}
-              />
+          {open === "notifications" && <NotificationsSection />}
+          {open === "ai" && (
+            <div className="space-y-7">
+              {/* The key comes first: every AI feature below is inert without
+                  one, and a list of features you can't use reads as broken. */}
+              <KeysSection />
+              <AiSection />
             </div>
-          </Card>
-        </section>
+          )}
+          {open === "calendar" && <CalendarSection />}
 
-        <KeysSection />
-        <DataSection onImported={init} />
+          {open === "appearance" && (
+            <section>
+              <SectionTitle>Appearance</SectionTitle>
+              <Card className="mt-2.5 p-5">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="text-[14px] text-[var(--ink)]">Theme</div>
+                    <p className="mt-0.5 text-[12.5px] leading-relaxed text-[var(--ink-dim)]">
+                      Dark by default. Sticky notes stay on paper colours either
+                      way — they sit on your wallpaper, not inside the app.
+                    </p>
+                  </div>
+                  <Segmented
+                    value={boot?.theme === "light" ? "light" : "dark"}
+                    onChange={(v) => void setTheme(v as "dark" | "light")}
+                    options={[
+                      { value: "dark", label: "Dark" },
+                      { value: "light", label: "Light" },
+                    ]}
+                  />
+                </div>
+              </Card>
+            </section>
+          )}
 
-        <UpdateSection version={boot?.appVersion} />
+          {open === "data" && <DataSection onImported={init} />}
 
-        <section>
-          <SectionTitle>About</SectionTitle>
-          <Card className="mt-2.5 p-5 text-[13px] leading-relaxed text-[var(--ink-dim)]">
-            <div>Retain {boot?.appVersion}</div>
-            <div className="mt-1.5 text-[var(--ink-faint)]">
-              No account, no server, no telemetry. Everything is on this Mac.
+          {open === "about" && (
+            <div className="space-y-7">
+              <UpdateSection version={boot?.appVersion} />
+              <section>
+                <SectionTitle>About</SectionTitle>
+                <Card className="mt-2.5 p-5 text-[13px] leading-relaxed text-[var(--ink-dim)]">
+                  <div>Retain {boot?.appVersion}</div>
+                  <div className="mt-1.5 text-[var(--ink-faint)]">
+                    No account, no server, no telemetry. Everything is on this
+                    Mac.
+                  </div>
+                </Card>
+              </section>
             </div>
-          </Card>
-        </section>
+          )}
+        </main>
       </div>
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
 
 function SubjectsSection({
   subjects,
@@ -161,7 +306,11 @@ function SubjectsSection({
               <Button size="sm" onClick={add}>
                 Add
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setAdding(false)}>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setAdding(false)}
+              >
                 Cancel
               </Button>
             </div>
@@ -171,14 +320,24 @@ function SubjectsSection({
               Add subject
             </Button>
           )}
-          {error && <div className="mt-2 text-[12.5px] text-[var(--danger)]">{error}</div>}
+          {error && (
+            <div className="mt-2 text-[12.5px] text-[var(--danger)]">
+              {error}
+            </div>
+          )}
         </div>
       </Card>
     </section>
   );
 }
 
-function SubjectRow({ subject, onChange }: { subject: Subject; onChange: () => Promise<void> }) {
+function SubjectRow({
+  subject,
+  onChange,
+}: {
+  subject: Subject;
+  onChange: () => Promise<void>;
+}) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(subject);
   const [goalHours, setGoalHours] = useState(
@@ -201,7 +360,8 @@ function SubjectRow({ subject, onChange }: { subject: Subject; onChange: () => P
   const saveGoal = async (raw: string) => {
     setGoalHours(raw);
     const hours = Number(raw);
-    const minutes = raw.trim() === "" || Number.isNaN(hours) ? null : Math.round(hours * 60);
+    const minutes =
+      raw.trim() === "" || Number.isNaN(hours) ? null : Math.round(hours * 60);
     await api.setWeeklyGoal(subject.id, minutes);
     setDraft({ ...draft, weeklyGoalMinutes: minutes });
     await onChange();
@@ -209,11 +369,15 @@ function SubjectRow({ subject, onChange }: { subject: Subject; onChange: () => P
 
   return (
     <div className="px-5 py-3.5">
-      <button className="flex w-full items-center gap-3 text-left" onClick={() => setOpen(!open)}>
+      <button
+        className="flex w-full items-center gap-3 text-left"
+        onClick={() => setOpen(!open)}
+      >
         <ColourDot colour={draft.colour} size={9} />
         <span className="flex-1 text-[14px]">{draft.name}</span>
         <span className="text-[12px] text-[var(--ink-faint)]">
-          {UNIT_LEVEL_LABELS[draft.unitLevel]} · {SUBJECT_TYPE_LABELS[draft.subjectType]}
+          {UNIT_LEVEL_LABELS[draft.unitLevel]} ·{" "}
+          {SUBJECT_TYPE_LABELS[draft.subjectType]}
         </span>
       </button>
 
@@ -240,10 +404,12 @@ function SubjectRow({ subject, onChange }: { subject: Subject; onChange: () => P
               size="sm"
               value={draft.subjectType}
               onChange={(v: SubjectType) => void save({ subjectType: v })}
-              options={(Object.keys(SUBJECT_TYPE_LABELS) as SubjectType[]).map((t) => ({
-                value: t,
-                label: SUBJECT_TYPE_LABELS[t],
-              }))}
+              options={(Object.keys(SUBJECT_TYPE_LABELS) as SubjectType[]).map(
+                (t) => ({
+                  value: t,
+                  label: SUBJECT_TYPE_LABELS[t],
+                }),
+              )}
             />
           </div>
 
@@ -265,7 +431,9 @@ function SubjectRow({ subject, onChange }: { subject: Subject; onChange: () => P
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-[13px] text-[var(--ink-dim)]">Weekly goal</span>
+            <span className="text-[13px] text-[var(--ink-dim)]">
+              Weekly goal
+            </span>
             <input
               type="number"
               min={0}
@@ -290,8 +458,8 @@ function SubjectRow({ subject, onChange }: { subject: Subject; onChange: () => P
             Remove from active subjects
           </button>
           <p className="text-[11.5px] leading-relaxed text-[var(--ink-faint)]">
-            Removing a subject hides it from pickers and rings. Its sessions and history stay
-            exactly as they are.
+            Removing a subject hides it from pickers and rings. Its sessions and
+            history stay exactly as they are.
           </p>
         </div>
       )}
@@ -314,7 +482,9 @@ function StudyingSection({
   useEffect(() => setValue(threshold), [threshold]);
 
   const toggleRest = async (day: number) => {
-    const next = restDays.includes(day) ? restDays.filter((d) => d !== day) : [...restDays, day];
+    const next = restDays.includes(day)
+      ? restDays.filter((d) => d !== day)
+      : [...restDays, day];
     await api.setRestDays(next);
     await onChange();
   };
@@ -327,9 +497,10 @@ function StudyingSection({
           <div>
             <div className="text-[14px]">Focused session length</div>
             <div className="mt-0.5 max-w-[400px] text-[12.5px] leading-relaxed text-[var(--ink-faint)]">
-              How much active time one session needs to earn the day. Pauses, idle time and breaks
-              don't count toward it. Defaults to 20, a little under a typical study block so a real
-              block that included some idle time still counts.
+              How much active time one session needs to earn the day. Pauses,
+              idle time and breaks don't count toward it. Defaults to 20, a
+              little under a typical study block so a real block that included
+              some idle time still counts.
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -371,12 +542,10 @@ function StudyingSection({
             ))}
           </div>
         </div>
-
       </Card>
     </section>
   );
 }
-
 
 // ---------------------------------------------------------------------------
 
@@ -414,11 +583,31 @@ function NotificationsSection() {
 
   if (!s) return null;
 
-  const CATS: { key: keyof NotificationSettings; label: string; blurb: string }[] = [
-    { key: "reviews", label: "Reviews due", blurb: "When cards are actually waiting." },
-    { key: "assessments", label: "Assessments", blurb: "Weekly far out, daily in the last fortnight." },
-    { key: "topicDecay", label: "Topic decay", blurb: "A shaky topic you haven't touched." },
-    { key: "streak", label: "Streak", blurb: "Only while today is still winnable." },
+  const CATS: {
+    key: keyof NotificationSettings;
+    label: string;
+    blurb: string;
+  }[] = [
+    {
+      key: "reviews",
+      label: "Reviews due",
+      blurb: "When cards are actually waiting.",
+    },
+    {
+      key: "assessments",
+      label: "Assessments",
+      blurb: "Weekly far out, daily in the last fortnight.",
+    },
+    {
+      key: "topicDecay",
+      label: "Topic decay",
+      blurb: "A shaky topic you haven't touched.",
+    },
+    {
+      key: "streak",
+      label: "Streak",
+      blurb: "Only while today is still winnable.",
+    },
   ];
 
   return (
@@ -444,21 +633,29 @@ function NotificationsSection() {
               <div className="flex items-center gap-1.5 text-[13px] text-[var(--ink-faint)]">
                 <select
                   value={s.quietFromHour}
-                  onChange={(e) => void save({ ...s, quietFromHour: Number(e.target.value) })}
+                  onChange={(e) =>
+                    void save({ ...s, quietFromHour: Number(e.target.value) })
+                  }
                   className="h-8 rounded-[var(--r-sm)] border border-[var(--line)] bg-[var(--surface-hi)] px-2 text-[12.5px] text-[var(--ink)]"
                 >
                   {Array.from({ length: 24 }, (_, h) => (
-                    <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>
+                    <option key={h} value={h}>
+                      {String(h).padStart(2, "0")}:00
+                    </option>
                   ))}
                 </select>
                 <span>to</span>
                 <select
                   value={s.quietToHour}
-                  onChange={(e) => void save({ ...s, quietToHour: Number(e.target.value) })}
+                  onChange={(e) =>
+                    void save({ ...s, quietToHour: Number(e.target.value) })
+                  }
                   className="h-8 rounded-[var(--r-sm)] border border-[var(--line)] bg-[var(--surface-hi)] px-2 text-[12.5px] text-[var(--ink)]"
                 >
                   {Array.from({ length: 24 }, (_, h) => (
-                    <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>
+                    <option key={h} value={h}>
+                      {String(h).padStart(2, "0")}:00
+                    </option>
                   ))}
                 </select>
               </div>
@@ -476,7 +673,9 @@ function NotificationsSection() {
                 min={0}
                 max={20}
                 value={s.dailyCap}
-                onChange={(e) => void save({ ...s, dailyCap: Number(e.target.value) })}
+                onChange={(e) =>
+                  void save({ ...s, dailyCap: Number(e.target.value) })
+                }
                 className="tabular h-8 w-[58px] rounded-[var(--r-sm)] border border-[var(--line)] bg-[var(--surface-hi)] px-2 text-center text-[13px] text-[var(--ink)]"
               />
             </div>
@@ -500,7 +699,10 @@ function NotificationsSection() {
                 </div>
                 <div className="mt-2 space-y-2">
                   {preview.map((p) => (
-                    <div key={p.dedupeKey} className="text-[12.5px] leading-relaxed">
+                    <div
+                      key={p.dedupeKey}
+                      className="text-[12.5px] leading-relaxed"
+                    >
                       <span className="text-[var(--ink)]">{p.title}</span>
                       <div className="text-[var(--ink-faint)]">{p.body}</div>
                     </div>
@@ -512,9 +714,10 @@ function NotificationsSection() {
         )}
 
         <p className="mt-4 border-t border-[var(--line-soft)] pt-4 text-[12px] leading-relaxed text-[var(--ink-faint)]">
-          Retain evaluates these while it's running. Closing the window is fine — it keeps going in
-          the menu bar. But if you quit entirely (⌘Q), nothing fires until you open it again. There
-          is no background helper, and adding one would mean a second always-on process with its own
+          Retain evaluates these while it's running. Closing the window is fine
+          — it keeps going in the menu bar. But if you quit entirely (⌘Q),
+          nothing fires until you open it again. There is no background helper,
+          and adding one would mean a second always-on process with its own
           permissions and updates.
         </p>
       </Card>
@@ -528,7 +731,9 @@ function KeysSection() {
 
   const refresh = async () => {
     const entries = await Promise.all(
-      PROVIDERS.map(async (p) => [p.value, await api.secretHas(p.value)] as const),
+      PROVIDERS.map(
+        async (p) => [p.value, await api.secretHas(p.value)] as const,
+      ),
     );
     setPresent(Object.fromEntries(entries));
     // Adding or removing a key changes what the AI features offer, and that
@@ -556,16 +761,18 @@ function KeysSection() {
         ))}
 
         <p className="px-5 py-4 text-[12px] leading-relaxed text-[var(--ink-faint)]">
-          Keys are checked with the provider before they're saved, so a typo or a half-copied key is
-          caught here rather than weeks later. Checking uses each provider's model-list endpoint —
-          it costs nothing and consumes no tokens.
+          Keys are checked with the provider before they're saved, so a typo or
+          a half-copied key is caught here rather than weeks later. Checking
+          uses each provider's model-list endpoint — it costs nothing and
+          consumes no tokens.
           <br />
           <br />
-          Keys live in your macOS Keychain and nowhere else — not in Retain's database, its
-          settings, its exports, or any log. Retain can check that a key exists but has no way to
-          read one back out to this screen. Because the app is ad-hoc signed rather than signed with
-          a paid Developer ID, its code signature changes with every build — so macOS will ask you
-          to allow Keychain access again after each update.
+          Keys live in your macOS Keychain and nowhere else — not in Retain's
+          database, its settings, its exports, or any log. Retain can check that
+          a key exists but has no way to read one back out to this screen.
+          Because the app is ad-hoc signed rather than signed with a paid
+          Developer ID, its code signature changes with every build — so macOS
+          will ask you to allow Keychain access again after each update.
         </p>
       </Card>
     </section>
@@ -590,7 +797,9 @@ function DataSection({ onImported }: { onImported: () => Promise<void> }) {
   const doImport = async (file: File) => {
     try {
       const report = await api.importJson(await file.text());
-      setMessage(`Restored ${report.rowsWritten} rows across ${report.tablesWritten} tables.`);
+      setMessage(
+        `Restored ${report.rowsWritten} rows across ${report.tablesWritten} tables.`,
+      );
       await onImported();
     } catch (e) {
       setMessage(String(e));
@@ -627,14 +836,19 @@ function DataSection({ onImported }: { onImported: () => Promise<void> }) {
         {confirming && (
           <div className="animate-in mt-4 rounded-[var(--r-md)] border border-[color-mix(in_srgb,var(--warn)_35%,transparent)] bg-[color-mix(in_srgb,var(--warn)_10%,transparent)] p-4">
             <div className="text-[13px] leading-relaxed text-[var(--ink)]">
-              Restoring replaces everything currently in Retain with the contents of the file. A
-              snapshot of your current data is taken first, so this is reversible.
+              Restoring replaces everything currently in Retain with the
+              contents of the file. A snapshot of your current data is taken
+              first, so this is reversible.
             </div>
             <div className="mt-3 flex gap-2">
               <Button size="sm" onClick={() => fileRef.current?.click()}>
                 Choose file
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setConfirming(false)}
+              >
                 Cancel
               </Button>
             </div>
@@ -648,14 +862,16 @@ function DataSection({ onImported }: { onImported: () => Promise<void> }) {
         )}
 
         <p className="mt-4 border-t border-[var(--line-soft)] pt-4 text-[12px] leading-relaxed text-[var(--ink-faint)]">
-          The export is every table, in plain JSON — it stays complete as Retain grows. Your
-          database also gets snapshotted automatically on each launch, keeping the last seven.
+          The export is every table, in plain JSON — it stays complete as Retain
+          grows. Your database also gets snapshotted automatically on each
+          launch, keeping the last seven.
           <br />
           <br />
-          Keeping the live database in iCloud Drive isn't offered: a SQLite file on a file-by-file
-          syncing service corrupts, and the reasons are written up in
-          <span className="selectable"> docs/icloud-sqlite-analysis.md</span>. Exports are the safe
-          way to move data between Macs.
+          Keeping the live database in iCloud Drive isn't offered: a SQLite file
+          on a file-by-file syncing service corrupts, and the reasons are
+          written up in
+          <span className="selectable"> docs/icloud-sqlite-analysis.md</span>.
+          Exports are the safe way to move data between Macs.
         </p>
       </Card>
     </section>
@@ -679,7 +895,9 @@ function AiSection() {
   const [models, setModels] = useState<ModelOption[]>([]);
   const [discovering, setDiscovering] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(
+    null,
+  );
 
   useEffect(() => {
     if (status) setModel(status.model);
@@ -695,13 +913,15 @@ function AiSection() {
         <SectionTitle>AI features</SectionTitle>
         <Card className="mt-2.5 p-5">
           <p className="text-[12.5px] leading-relaxed text-[var(--ink-dim)]">
-            Retain has five optional AI features: structuring a captured note into a task,
-            generating flashcards from pasted notes, writing your weekly review, drafting
-            VCAA-style practice questions, and suggesting a category for a logged mistake.
+            Retain has five optional AI features: structuring a captured note
+            into a task, generating flashcards from pasted notes, writing your
+            weekly review, drafting VCAA-style practice questions, and
+            suggesting a category for a logged mistake.
             <br />
             <br />
-            Add a key above to turn them on. Nothing else in Retain uses AI — the timer, cards,
-            error log, streak and everything else work exactly the same with no key at all.
+            Add a key above to turn them on. Nothing else in Retain uses AI —
+            the timer, cards, error log, streak and everything else work exactly
+            the same with no key at all.
           </p>
         </Card>
       </section>
@@ -773,7 +993,11 @@ function AiSection() {
               ))}
             </datalist>
 
-            <Button size="sm" disabled={!dirty} onClick={() => void save(model)}>
+            <Button
+              size="sm"
+              disabled={!dirty}
+              onClick={() => void save(model)}
+            >
               Save
             </Button>
           </div>
@@ -787,7 +1011,10 @@ function AiSection() {
                 setTesting(true);
                 setResult(null);
                 try {
-                  setResult({ ok: true, message: await api.testAiModel(provider!, model) });
+                  setResult({
+                    ok: true,
+                    message: await api.testAiModel(provider!, model),
+                  });
                 } catch (e) {
                   setResult({ ok: false, message: String(e) });
                 } finally {
@@ -824,7 +1051,9 @@ function AiSection() {
             <p
               className={cx(
                 "mt-2.5 text-[12.5px] leading-relaxed",
-                result.ok ? "text-[var(--color-positive)]" : "text-[var(--danger)]",
+                result.ok
+                  ? "text-[var(--color-positive)]"
+                  : "text-[var(--danger)]",
               )}
             >
               {result.ok ? "✓ " : ""}
@@ -857,24 +1086,25 @@ function AiSection() {
                 ))}
               </div>
               <p className="mt-2 text-[11.5px] leading-relaxed text-[var(--ink-faint)]">
-                Being listed doesn't guarantee it runs — some models are listed but still refuse
-                the request. Use Test to be sure.
+                Being listed doesn't guarantee it runs — some models are listed
+                but still refuse the request. Use Test to be sure.
               </p>
             </div>
           )}
 
           <p className="mt-2.5 text-[12px] leading-relaxed text-[var(--ink-faint)]">
-            Providers retire model names on their own schedule, which is why this is an editable
-            field. Gemini's default is the maintained alias{" "}
-            <code className="font-mono">gemini-flash-latest</code> rather than a pinned version,
-            so it shouldn't go stale again.
+            Providers retire model names on their own schedule, which is why
+            this is an editable field. Gemini's default is the maintained alias{" "}
+            <code className="font-mono">gemini-flash-latest</code> rather than a
+            pinned version, so it shouldn't go stale again.
           </p>
         </div>
 
         <p className="border-t border-[var(--line-soft)] pt-4 text-[12px] leading-relaxed text-[var(--ink-faint)]">
-          Every AI feature returns a suggestion you edit and confirm. Nothing is written to your
-          cards, tasks or error log without you accepting it. Your weekly review's numbers are
-          calculated by Retain, not by the model — only the wording around them is generated.
+          Every AI feature returns a suggestion you edit and confirm. Nothing is
+          written to your cards, tasks or error log without you accepting it.
+          Your weekly review's numbers are calculated by Retain, not by the
+          model — only the wording around them is generated.
         </p>
       </Card>
     </section>

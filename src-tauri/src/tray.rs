@@ -126,6 +126,18 @@ pub fn build(app: &AppHandle) -> anyhow::Result<TrayHandles> {
     })
 }
 
+/// As `show_main_window`, generic over the runtime for the menu handler.
+pub fn show_main_window_generic<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    #[cfg(target_os = "macos")]
+    let _ = app.show();
+
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}
+
 pub fn show_main_window(app: &AppHandle) {
     // Closing the window hides the whole application, so the app itself has to
     // come back before its window can. Showing the window alone leaves it

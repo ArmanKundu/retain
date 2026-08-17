@@ -13,6 +13,7 @@ mod mastery;
 mod models;
 mod notes;
 mod notifications;
+mod pdfpage;
 mod plan;
 mod provider;
 mod questions;
@@ -302,6 +303,8 @@ pub fn run() {
             commands::question_tags,
             commands::question_solutions,
             commands::question_facets,
+            commands::question_page_image,
+            commands::locate_question_pages,
             commands::tag_question,
             commands::untag_question,
             commands::index_questions,

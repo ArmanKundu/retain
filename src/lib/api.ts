@@ -590,6 +590,12 @@ export const api = {
   /** The solutions document for a question's paper, if the library has one. */
   questionSolutions: (resourceId: number) =>
     invoke<[number, string] | null>("question_solutions", { resourceId }),
+  /** The page a question is printed on, rendered from the original PDF. */
+  questionPageImage: (questionId: number) =>
+    invoke<string>("question_page_image", { questionId }),
+  /** Work out which page each question sits on, a few papers at a time. */
+  locateQuestionPages: (batch: number) =>
+    invoke<IndexProgress>("locate_question_pages", { batch }),
   questionTags: (subjectId: number | null) =>
     invoke<[string, number][]>("question_tags", { subjectId }),
   tagQuestion: (questionId: number, tag: string) =>

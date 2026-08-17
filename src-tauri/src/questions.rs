@@ -52,6 +52,11 @@ pub struct Question {
     pub subject_name: Option<String>,
     pub label: String,
     pub words: i64,
+    /// Zero-based page in the original PDF, once located.
+    pub page: Option<i64>,
+    /// Whether the original file is still where it was imported from — the
+    /// only thing that decides if a picture is possible.
+    pub has_file: bool,
     pub text: String,
     pub tags: Vec<String>,
     /// Year, publisher and whether this came out of a solutions document —
@@ -277,7 +282,7 @@ pub fn unindexed(conn: &Connection) -> Result<Vec<i64>> {
 }
 
 const SELECT: &str = "SELECT q.id, q.resource_id, r.title, q.subject_id, s.name, q.label,
-                             q.words, q.text
+                             q.words, q.text, q.page, r.origin_path
                         FROM questions q
                         JOIN resources r ON r.id = q.resource_id
                         LEFT JOIN subjects s ON s.id = q.subject_id";
@@ -292,6 +297,12 @@ fn row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Question> {
         label: r.get(5)?,
         words: r.get(6)?,
         text: r.get(7)?,
+        page: r.get(8)?,
+        // Checked here rather than trusted: `origin_path` records where a file
+        // was, and a paper you imported and then moved has text and no file.
+        has_file: r
+            .get::<_, Option<String>>(9)?
+            .is_some_and(|p| std::path::Path::new(&p).is_file()),
         tags: Vec::new(),
         paper: paper_meta(&r.get::<_, String>(2)?),
     })
@@ -551,6 +562,79 @@ pub fn solutions_for(conn: &Connection, resource_id: i64) -> Result<Option<(i64,
 
     // Only accept it if the longer title is actually the answers.
     Ok(found.filter(|(_, t): &(i64, String)| paper_meta(t).is_solutions))
+}
+
+/// Find which page each question in a paper is printed on.
+///
+/// Separate from indexing, and run on demand, because it opens the PDF once
+/// per question and a thousand papers of that is minutes rather than seconds.
+/// Indexing gives you searchable questions immediately; pictures come after.
+#[cfg(target_os = "macos")]
+pub fn locate_pages(conn: &Connection, resource_id: i64) -> Result<usize> {
+    let origin: Option<String> = conn.query_row(
+        "SELECT origin_path FROM resources WHERE id = ?1",
+        [resource_id],
+        |r| r.get(0),
+    )?;
+
+    let Some(path) = origin.filter(|p| std::path::Path::new(p).is_file()) else {
+        return Ok(0);
+    };
+    let pdf = std::path::Path::new(&path);
+
+    let mut stmt = conn.prepare(
+        "SELECT id, text FROM questions WHERE resource_id = ?1 AND page IS NULL",
+    )?;
+    let pending: Vec<(i64, String)> = stmt
+        .query_map([resource_id], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<Result<Vec<_>, _>>()?;
+    drop(stmt);
+
+    let mut found = 0;
+    for (id, text) in pending {
+        // A question whose words aren't in the PDF is left NULL rather than
+        // guessed at — a picture of the wrong page is worse than none.
+        if let Ok(Some(page)) = crate::pdfpage::find_page(pdf, &text) {
+            conn.execute(
+                "UPDATE questions SET page = ?2 WHERE id = ?1",
+                rusqlite::params![id, page as i64],
+            )?;
+            found += 1;
+        }
+    }
+    Ok(found)
+}
+
+/// Papers that have questions but no located pages yet.
+pub fn unlocated(conn: &Connection) -> Result<Vec<i64>> {
+    let mut stmt = conn.prepare(
+        "SELECT DISTINCT q.resource_id FROM questions q
+           JOIN resources r ON r.id = q.resource_id
+          WHERE q.page IS NULL AND r.origin_path IS NOT NULL
+          ORDER BY q.resource_id",
+    )?;
+    let rows = stmt.query_map([], |r| r.get(0))?.collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+/// The PDF path and page for one question, if both are known.
+pub fn page_source(conn: &Connection, question_id: i64) -> Result<Option<(String, i64)>> {
+    let found: Option<(Option<String>, Option<i64>)> = conn
+        .query_row(
+            "SELECT r.origin_path, q.page FROM questions q
+               JOIN resources r ON r.id = q.resource_id
+              WHERE q.id = ?1",
+            [question_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?;
+
+    Ok(match found {
+        Some((Some(path), Some(page))) if std::path::Path::new(&path).is_file() => {
+            Some((path, page))
+        }
+        _ => None,
+    })
 }
 
 #[cfg(test)]

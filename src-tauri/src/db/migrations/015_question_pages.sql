@@ -1,0 +1,13 @@
+-- Which page of the PDF a question is printed on.
+--
+-- The stored text is one string with no page boundaries in it, so nothing in
+-- the database could answer "show me this question" with a picture. The page
+-- is found by searching the original PDF for the question's opening words and
+-- recorded here, because that search costs an open-and-scan of a twenty-page
+-- document and is not something to do on every render.
+--
+-- NULL means one of three things, and they're deliberately not distinguished:
+-- the paper hasn't been located yet, the file has moved, or the words weren't
+-- found. All three come out the same way in the UI — no picture, with the
+-- reason worked out at the time you ask.
+ALTER TABLE questions ADD COLUMN page INTEGER;

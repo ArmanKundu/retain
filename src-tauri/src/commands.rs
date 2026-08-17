@@ -3153,3 +3153,100 @@ pub async fn ai_cards_from_material(
         .cards_from_notes(&context, &subject_name, count.clamp(1, 40))
         .await?)
 }
+
+/// Render the page a question is printed on.
+///
+/// Cached to disk on first render. A page is a few hundred kilobytes of PNG,
+/// and putting that in SQLite would grow the database by a gigabyte across a
+/// thousand papers — the cache directory is the right place for something that
+/// can always be rebuilt from the original.
+#[tauri::command]
+pub fn question_page_image(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    question_id: i64,
+) -> CmdResult<String> {
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (state, app, question_id);
+        return Err(CommandError("Page images are macOS only.".into()));
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let source = {
+            let conn = db(&state);
+            questions::page_source(&conn, question_id)?
+        };
+
+        let Some((path, page)) = source else {
+            return Err(CommandError(
+                "The original PDF isn't where it was imported from, so there's no page to show. \
+                 Re-sync the folder in Library and it'll come back."
+                    .into(),
+            ));
+        };
+
+        let dir = app
+            .path()
+            .app_cache_dir()
+            .map_err(|e| CommandError(e.to_string()))?
+            .join("pages");
+        std::fs::create_dir_all(&dir).map_err(|e| CommandError(e.to_string()))?;
+
+        let cached = dir.join(format!("q{question_id}.png"));
+        if let Ok(bytes) = std::fs::read(&cached) {
+            return Ok(screen::to_data_url(&bytes));
+        }
+
+        let png = crate::pdfpage::render_page(Path::new(&path), page as usize)
+            .map_err(|e| CommandError(e.to_string()))?;
+        // A cache write that fails is not worth failing the render over.
+        let _ = std::fs::write(&cached, &png);
+
+        Ok(screen::to_data_url(&png))
+    }
+}
+
+/// Work out which page each question sits on, a paper at a time.
+///
+/// Separate from indexing and much slower: locating opens the PDF once per
+/// question. Indexing gives you searchable questions in seconds; pictures are
+/// the pass you leave running.
+#[tauri::command]
+pub fn locate_question_pages(
+    state: State<'_, AppState>,
+    batch: Option<i64>,
+) -> CmdResult<IndexProgress> {
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (state, batch);
+        return Ok(IndexProgress { done: 0, remaining: 0, questions: 0 });
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let conn = db(&state);
+        let pending = questions::unlocated(&conn)?;
+        let take = batch.unwrap_or(5).clamp(1, 50) as usize;
+
+        let mut done = 0i64;
+        for id in pending.iter().take(take) {
+            match questions::locate_pages(&conn, *id) {
+                Ok(_) => done += 1,
+                Err(e) => eprintln!("[retain] couldn't locate pages in {id}: {e}"),
+            }
+        }
+
+        let located: i64 =
+            conn.query_row("SELECT COUNT(*) FROM questions WHERE page IS NOT NULL", [], |r| {
+                r.get(0)
+            })?;
+
+        Ok(IndexProgress {
+            done,
+            remaining: (pending.len() as i64 - done).max(0),
+            questions: located,
+        })
+    }
+}

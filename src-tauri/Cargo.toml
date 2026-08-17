@@ -76,3 +76,16 @@ chrono-tz = "0.10.4"
 iana-time-zone = "0.1.65"
 tauri-plugin-dialog = "2.7.2"
 pdf-extract = "0.12.0"
+
+# PDF page rendering, macOS only.
+#
+# PDFKit is a system framework, so nothing is shipped alongside the binary —
+# the alternative (pdfium) means carrying a ~10MB library per platform for a
+# feature that only ever runs on this one. PDFKit also answers both halves of
+# the problem in one place: `findString` says which page a question is on, and
+# the page draws itself into a bitmap.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSString", "NSData", "NSURL", "NSArray", "NSValue", "NSGeometry"] }
+objc2-pdf-kit = { version = "0.3", features = ["PDFDocument", "PDFPage", "PDFSelection"] }
+objc2-app-kit = { version = "0.3", features = ["NSImage", "NSBitmapImageRep", "NSGraphics", "NSImageRep"] }

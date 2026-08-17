@@ -11,7 +11,14 @@
 // one thing Retain doesn't do.
 
 import { useCallback, useEffect, useState } from "react";
-import { FileText, Loader2, Search, Tag, X } from "lucide-react";
+import {
+  FileText,
+  Image as ImageIcon,
+  Loader2,
+  Search,
+  Tag,
+  X,
+} from "lucide-react";
 
 import { SectionHeader } from "../components/primitives";
 import { Button, Card, cx } from "../components/ui";
@@ -34,6 +41,8 @@ export function Questions() {
   const [results, setResults] = useState<PastQuestion[]>([]);
   const [tags, setTags] = useState<[string, number][]>([]);
   const [indexing, setIndexing] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const [pagesLeft, setPagesLeft] = useState<number | null>(null);
   const [remaining, setRemaining] = useState<number | null>(null);
   const [total, setTotal] = useState(0);
   const [searched, setSearched] = useState(false);
@@ -67,6 +76,10 @@ export function Questions() {
         setTotal(p.questions);
       })
       .catch(() => setRemaining(null));
+    void api
+      .locateQuestionPages(0)
+      .then((p) => setPagesLeft(p.remaining))
+      .catch(() => setPagesLeft(null));
   }, []);
 
   // Debounced, because the query runs against FTS on every keystroke.
@@ -114,6 +127,26 @@ export function Questions() {
     }
   };
 
+  /**
+   * Work out which page each question is printed on.
+   *
+   * Much slower than indexing — it opens a PDF once per question — so it is a
+   * separate pass you leave running rather than something bundled into
+   * indexing, which finishes in seconds.
+   */
+  const runLocate = async () => {
+    setLocating(true);
+    try {
+      for (;;) {
+        const p = await api.locateQuestionPages(4);
+        setPagesLeft(p.remaining);
+        if (p.remaining <= 0 || p.done === 0) break;
+      }
+    } finally {
+      setLocating(false);
+    }
+  };
+
   return (
     <div className="mx-auto w-full max-w-[min(1000px,100%)] px-6 pb-16 sm:px-9">
       <div className="titlebar-drag h-11" />
@@ -154,6 +187,33 @@ export function Questions() {
               <FileText size={13} />
             )}
             {indexing ? "Working…" : "Index them"}
+          </Button>
+        </Card>
+      )}
+
+      {pagesLeft !== null && pagesLeft > 0 && remaining === 0 && (
+        <Card className="animate-rise mb-5 flex flex-wrap items-center gap-3 p-4">
+          <div className="min-w-0 flex-1">
+            <div className="text-[13.5px] text-[var(--ink)]">
+              {pagesLeft} papers haven't had their pages located
+            </div>
+            <p className="mt-0.5 text-[12px] leading-relaxed text-[var(--ink-faint)]">
+              Finds which page each question is printed on, so questions can be
+              shown as they appear on the paper rather than as extracted text.
+              Slower than indexing — it opens each PDF — and safe to stop.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            disabled={locating}
+            onClick={() => void runLocate()}
+          >
+            {locating ? (
+              <Loader2 size={13} className="animate-spin" />
+            ) : (
+              <ImageIcon size={13} />
+            )}
+            {locating ? "Working…" : "Find pages"}
           </Button>
         </Card>
       )}
@@ -497,6 +557,8 @@ function QuestionDetail({
 }) {
   const [solutions, setSolutions] = useState<[number, string] | null>(null);
   const [checked, setChecked] = useState(false);
+  const [image, setImage] = useState<string | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
 
   useEffect(() => {
     void api
@@ -505,6 +567,17 @@ function QuestionDetail({
       .catch(() => setSolutions(null))
       .finally(() => setChecked(true));
   }, [question.resourceId]);
+
+  // The page itself, when we know which one it is. Rendered on demand and
+  // cached to disk — a page is a few hundred kilobytes, and rendering the
+  // whole library up front would take minutes for pages you never open.
+  useEffect(() => {
+    if (question.page === null) return;
+    void api
+      .questionPageImage(question.id)
+      .then(setImage)
+      .catch((e) => setImageError(String(e)));
+  }, [question.id, question.page]);
 
   return (
     <div
@@ -531,9 +604,34 @@ function QuestionDetail({
           </button>
         </div>
 
-        <p className="selectable mt-4 whitespace-pre-wrap text-[13.5px] leading-relaxed text-[var(--ink)]">
-          {question.text}
-        </p>
+        {/* The page, when we have it. A VCAA question is a diagram, a graph
+            and four options laid out in a particular way — the extracted text
+            of it reads as soup, and you can't answer from soup. */}
+        {image ? (
+          <img
+            src={image}
+            alt={`${question.label} as printed`}
+            className="mt-4 w-full rounded-[var(--r-md)] border border-[var(--line-soft)] bg-white"
+          />
+        ) : (
+          <>
+            <p className="selectable mt-4 whitespace-pre-wrap text-[13.5px] leading-relaxed text-[var(--ink)]">
+              {question.text}
+            </p>
+            {question.page === null && (
+              <p className="mt-2 text-[11.5px] leading-relaxed text-[var(--ink-faint)]">
+                {question.hasFile
+                  ? "The page hasn't been located yet — run Find pages."
+                  : "The original PDF isn't where it was imported from, so there's no page to show."}
+              </p>
+            )}
+            {imageError && (
+              <p className="mt-2 text-[11.5px] leading-relaxed text-[var(--ink-faint)]">
+                {imageError}
+              </p>
+            )}
+          </>
+        )}
 
         <div className="mt-5 border-t border-[var(--line-soft)] pt-4">
           {!checked ? null : solutions ? (

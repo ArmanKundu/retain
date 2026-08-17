@@ -1038,6 +1038,10 @@ export interface PastQuestion {
   year: number | null;
   source: string | null;
   isSolutions: boolean;
+  /** Zero-based page in the original PDF, once located. */
+  page: number | null;
+  /** Whether the original PDF is still where it was imported from. */
+  hasFile: boolean;
 }
 
 export interface QuestionFilters {

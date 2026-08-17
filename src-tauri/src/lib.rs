@@ -300,6 +300,8 @@ pub fn run() {
             commands::get_sticky,
             commands::search_questions,
             commands::question_tags,
+            commands::question_solutions,
+            commands::question_facets,
             commands::tag_question,
             commands::untag_question,
             commands::index_questions,

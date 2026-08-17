@@ -24,7 +24,7 @@
 //! document it came from is one click away.
 
 use anyhow::Result;
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use serde::Serialize;
 
 /// Below this a "question" is a heading, a page artefact, or a stray line.
@@ -54,6 +54,10 @@ pub struct Question {
     pub words: i64,
     pub text: String,
     pub tags: Vec<String>,
+    /// Year, publisher and whether this came out of a solutions document —
+    /// derived from the paper's title, which is where all of it actually lives.
+    #[serde(flatten)]
+    pub paper: PaperMeta,
 }
 
 /// Whether a line is a question marker, and which number it carries.
@@ -289,17 +293,36 @@ fn row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Question> {
         words: r.get(6)?,
         text: r.get(7)?,
         tags: Vec::new(),
+        paper: paper_meta(&r.get::<_, String>(2)?),
     })
 }
 
 /// Search. Empty query with a tag filter lists that tag.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Filters {
+    pub subject_id: Option<i64>,
+    pub tag: Option<String>,
+    /// Inclusive. A paper whose title carries no year is excluded once either
+    /// bound is set — "2014 to 2025" should not quietly include undated ones.
+    pub from_year: Option<i64>,
+    pub to_year: Option<i64>,
+    pub source: Option<String>,
+    /// Whether to include questions that came out of a solutions document.
+    /// Off by default: those are answers, and searching for a topic should
+    /// return the questions on it.
+    #[serde(default)]
+    pub include_solutions: bool,
+}
+
 pub fn search(
     conn: &Connection,
     query: &str,
-    subject_id: Option<i64>,
-    tag: Option<&str>,
+    filters: &Filters,
     limit: i64,
 ) -> Result<Vec<Question>> {
+    let subject_id = filters.subject_id;
+    let tag = filters.tag.as_deref();
     let terms = crate::resources::to_match_query(query);
 
     let mut sql = String::from(SELECT);
@@ -333,12 +356,43 @@ pub fn search(
     } else {
         " ORDER BY q.resource_id DESC, q.ordinal LIMIT ?"
     });
-    binds.push(Box::new(limit));
+    // Over-fetch, because year and source are read from the title in Rust
+    // rather than stored — filtering them in SQL would mean a fourth column
+    // that has to be kept in step with the parser.
+    let needs_post_filter = filters.from_year.is_some()
+        || filters.to_year.is_some()
+        || filters.source.is_some()
+        || !filters.include_solutions;
+    binds.push(Box::new(if needs_post_filter { limit * 6 } else { limit }));
 
     let mut stmt = conn.prepare(&sql)?;
     let params: Vec<&dyn rusqlite::ToSql> = binds.iter().map(|b| b.as_ref()).collect();
     let mut found: Vec<Question> =
         stmt.query_map(params.as_slice(), row)?.collect::<Result<Vec<_>, _>>()?;
+
+    found.retain(|q| {
+        if !filters.include_solutions && q.paper.is_solutions {
+            return false;
+        }
+        if let Some(want) = filters.source.as_deref() {
+            if q.paper.source.as_deref() != Some(want) {
+                return false;
+            }
+        }
+        if filters.from_year.is_some() || filters.to_year.is_some() {
+            let Some(year) = q.paper.year else {
+                return false;
+            };
+            if filters.from_year.is_some_and(|f| year < f) {
+                return false;
+            }
+            if filters.to_year.is_some_and(|t| year > t) {
+                return false;
+            }
+        }
+        true
+    });
+    found.truncate(limit as usize);
 
     // Tags in a second pass. One query per question would be a hundred queries
     // for a screen of results.
@@ -382,6 +436,121 @@ pub fn remove_tag(conn: &Connection, question_id: i64, tag: &str) -> Result<()> 
         rusqlite::params![question_id, tag.trim().to_lowercase()],
     )?;
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// What a paper is
+// ---------------------------------------------------------------------------
+
+/// The facts a paper's filename actually carries.
+///
+/// Every title in the real library follows the same shape — year, then who
+/// wrote it, then which paper: `2018 kilbaha exam 1 solutions`, `2016 TSSM
+/// Unit 4 Key Topic Test 1`, `2024 vcaa nht solutions`. None of it is stored
+/// anywhere, so filtering by year meant reading a thousand titles by eye.
+#[derive(Debug, Clone, PartialEq, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PaperMeta {
+    pub year: Option<i64>,
+    /// VCAA, Neap, TSSM, Kilbaha… Lowercased, because the titles aren't
+    /// consistent about capitals and you'd otherwise get two "Neap" filters.
+    pub source: Option<String>,
+    /// Whether this document holds the answers.
+    pub is_solutions: bool,
+}
+
+/// Publishers seen in the real library, plus VCAA itself.
+///
+/// A fixed list rather than "the second word", because titles like `2015
+/// engage a exam 1` have a section letter where a publisher's second word
+/// would be, and `2016 vcaa` has nothing after it at all.
+const SOURCES: [&str; 14] = [
+    "vcaa", "neap", "tssm", "kilbaha", "insight", "heffernan", "itute", "lisachem", "engage",
+    "prime", "access", "legac", "stav", "compak",
+];
+
+pub fn paper_meta(title: &str) -> PaperMeta {
+    let lower = title.to_lowercase();
+
+    // A four-digit number in the plausible range. Taken from anywhere in the
+    // title rather than only the start — `Unit 4 2016 exam` happens.
+    let year = lower
+        .split(|c: char| !c.is_ascii_digit())
+        .filter(|w| w.len() == 4)
+        .filter_map(|w| w.parse::<i64>().ok())
+        .find(|y| (1990..=2100).contains(y));
+
+    let source = SOURCES
+        .iter()
+        .find(|s| {
+            lower
+                .match_indices(*s)
+                .any(|(at, _)| bounded_word(&lower, at, s.len()))
+        })
+        .map(|s| s.to_string());
+
+    PaperMeta {
+        year,
+        source,
+        // "report" is VCAA's examiner's report, which is answers with
+        // commentary — the same thing for the purpose of "show me the answer".
+        is_solutions: ["solution", "answer", "report"]
+            .iter()
+            .any(|w| lower.contains(w)),
+    }
+}
+
+/// Whether a match sits on word boundaries. `access` must not match `accessed`.
+fn bounded_word(haystack: &str, at: usize, len: usize) -> bool {
+    let before = at == 0
+        || !haystack[..at]
+            .chars()
+            .next_back()
+            .is_some_and(|c| c.is_alphanumeric());
+    let after = at + len >= haystack.len()
+        || !haystack[at + len..]
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_alphanumeric());
+    before && after
+}
+
+/// The solutions document for a paper, if one is in the library.
+///
+/// Matched on the paper's own title with the solution words stripped, so
+/// `2018 kilbaha exam 1` finds `2018 kilbaha exam 1 solutions`. Deliberately
+/// exact rather than fuzzy: pairing the wrong solutions to a question is worse
+/// than pairing none, because you would revise from the answer to a different
+/// question and never notice.
+pub fn solutions_for(conn: &Connection, resource_id: i64) -> Result<Option<(i64, String)>> {
+    let (title, subject_id): (String, Option<i64>) = conn.query_row(
+        "SELECT title, subject_id FROM resources WHERE id = ?1",
+        [resource_id],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )?;
+
+    let stem = title.to_lowercase();
+    if paper_meta(&title).is_solutions {
+        return Ok(None); // this *is* the solutions
+    }
+
+    let mut stmt = conn.prepare(
+        "SELECT id, title FROM resources
+          WHERE id != ?1
+            AND (?2 IS NULL OR subject_id IS ?2)
+            AND lower(title) LIKE ?3
+          ORDER BY length(title) LIMIT 1",
+    )?;
+
+    let found = stmt
+        .query_row(
+            rusqlite::params![resource_id, subject_id, format!("{stem} %")],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?;
+
+    // Only accept it if the longer title is actually the answers.
+    Ok(found.filter(|(_, t): &(i64, String)| paper_meta(t).is_solutions))
 }
 
 #[cfg(test)]

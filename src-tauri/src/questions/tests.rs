@@ -41,6 +41,16 @@ fn db() -> Connection {
     conn
 }
 
+/// Default filters: no year range, no source, and solutions kept in — the
+/// tests are about segmentation and tagging, not the filter surface.
+fn any() -> Filters {
+    Filters { include_solutions: true, ..Default::default() }
+}
+
+fn tagged(tag: &str) -> Filters {
+    Filters { tag: Some(tag.into()), include_solutions: true, ..Default::default() }
+}
+
 fn add_paper(conn: &Connection, id: i64, title: &str, kind: &str, content: &str) {
     conn.execute(
         "INSERT INTO resources (id,subject_id,title,kind,content,word_count,added_at)
@@ -164,7 +174,7 @@ fn indexing_a_paper_stores_its_questions_with_tags() {
     let n = index_resource(&mut conn, 1).unwrap();
     assert_eq!(n, 2);
 
-    let found = search(&conn, "inhibitor", None, None, 10).unwrap();
+    let found = search(&conn, "inhibitor", &any(), 10).unwrap();
     assert_eq!(found.len(), 1);
     assert_eq!(found[0].label, "Question 2 (4 marks)");
     assert_eq!(found[0].resource_title, "2005 STAV Unit 4");
@@ -173,7 +183,7 @@ fn indexing_a_paper_stores_its_questions_with_tags() {
     // "enzyme" — so it gets no automatic tag, which is the honest answer.
     assert!(found[0].tags.is_empty());
 
-    let q1 = search(&conn, "activation", None, None, 10).unwrap();
+    let q1 = search(&conn, "activation", &any(), 10).unwrap();
     assert_eq!(q1[0].tags, vec!["Enzymes"], "tagged from the topic list");
 }
 
@@ -187,7 +197,7 @@ fn only_exam_shaped_material_is_indexed() {
 
     assert_eq!(index_resource(&mut conn, 1).unwrap(), 0);
     assert_eq!(index_resource(&mut conn, 2).unwrap(), 0);
-    assert!(search(&conn, "enzyme", None, None, 10).unwrap().is_empty());
+    assert!(search(&conn, "enzyme", &any(), 10).unwrap().is_empty());
 }
 
 /// The button that triggers this is easy to press twice.
@@ -212,11 +222,11 @@ fn deleting_a_paper_takes_its_questions_out_of_the_index() {
     let mut conn = db();
     add_paper(&conn, 1, "Paper", "past_paper", PAPER);
     index_resource(&mut conn, 1).unwrap();
-    assert_eq!(search(&conn, "enzyme", None, None, 10).unwrap().len(), 1);
+    assert_eq!(search(&conn, "enzyme", &any(), 10).unwrap().len(), 1);
 
     conn.execute("DELETE FROM resources WHERE id = 1", []).unwrap();
 
-    assert!(search(&conn, "enzyme", None, None, 10).unwrap().is_empty());
+    assert!(search(&conn, "enzyme", &any(), 10).unwrap().is_empty());
     let orphans: i64 = conn
         .query_row("SELECT COUNT(*) FROM question_tags", [], |r| r.get(0))
         .unwrap();
@@ -230,16 +240,16 @@ fn a_tag_filter_works_with_and_without_a_query() {
     index_resource(&mut conn, 1).unwrap();
 
     // Tag alone: no MATCH, so ordering must not touch bm25.
-    let by_tag = search(&conn, "", None, Some("Enzymes"), 10).unwrap();
+    let by_tag = search(&conn, "", &tagged("Enzymes"), 10).unwrap();
     assert_eq!(by_tag.len(), 1);
 
     // Query and tag are an AND. "inhibitor" is question 2, which carries no
     // Enzymes tag, so the pair matches nothing — and that is the point of
     // combining them.
-    assert!(search(&conn, "inhibitor", None, Some("Enzymes"), 10).unwrap().is_empty());
-    assert_eq!(search(&conn, "activation", None, Some("Enzymes"), 10).unwrap().len(), 1);
+    assert!(search(&conn, "inhibitor", &tagged("Enzymes"), 10).unwrap().is_empty());
+    assert_eq!(search(&conn, "activation", &tagged("Enzymes"), 10).unwrap().len(), 1);
 
-    assert!(search(&conn, "", None, Some("Nothing"), 10).unwrap().is_empty());
+    assert!(search(&conn, "", &tagged("Nothing"), 10).unwrap().is_empty());
 }
 
 #[test]
@@ -247,14 +257,14 @@ fn a_manual_tag_can_be_added_and_taken_off() {
     let mut conn = db();
     add_paper(&conn, 1, "Paper", "past_paper", PAPER);
     index_resource(&mut conn, 1).unwrap();
-    let id = search(&conn, "inhibitor", None, None, 1).unwrap()[0].id;
+    let id = search(&conn, "inhibitor", &any(), 1).unwrap()[0].id;
 
     add_tag(&conn, id, "  Hard  ").unwrap();
-    let tags = &search(&conn, "inhibitor", None, None, 1).unwrap()[0].tags;
+    let tags = &search(&conn, "inhibitor", &any(), 1).unwrap()[0].tags;
     assert!(tags.contains(&"hard".to_string()), "normalised: {tags:?}");
 
     remove_tag(&conn, id, "HARD").unwrap();
-    assert!(!search(&conn, "inhibitor", None, None, 1).unwrap()[0]
+    assert!(!search(&conn, "inhibitor", &any(), 1).unwrap()[0]
         .tags
         .contains(&"hard".to_string()));
 }
@@ -265,7 +275,7 @@ fn tags_are_listed_most_used_first() {
     add_paper(&conn, 1, "Paper", "past_paper", PAPER);
     index_resource(&mut conn, 1).unwrap();
 
-    let ids: Vec<i64> = search(&conn, "", None, None, 10).unwrap().iter().map(|q| q.id).collect();
+    let ids: Vec<i64> = search(&conn, "", &any(), 10).unwrap().iter().map(|q| q.id).collect();
     add_tag(&conn, ids[0], "sac").unwrap();
 
     let tags = all_tags(&conn, None).unwrap();
@@ -283,4 +293,190 @@ fn a_paper_with_no_questions_yet_is_reported_as_unindexed() {
 
     index_resource(&mut conn, 1).unwrap();
     assert!(unindexed(&conn).unwrap().is_empty());
+}
+
+// -- what a paper's title actually says --------------------------------------
+//
+// Every title below is real, taken from the library.
+
+#[test]
+fn a_title_gives_up_its_year_publisher_and_whether_it_is_the_answers() {
+    let cases = [
+        ("2018 kilbaha exam 1 solutions", Some(2018), Some("kilbaha"), true),
+        ("2016 TSSM Unit 4 Key Topic Test 1", Some(2016), Some("tssm"), false),
+        ("2024 vcaa nht solutions", Some(2024), Some("vcaa"), true),
+        ("2000 vcaa unit 4 report", Some(2000), Some("vcaa"), true),
+        ("2015 engage a exam 1", Some(2015), Some("engage"), false),
+        ("2022 neap unit 2", Some(2022), Some("neap"), false),
+        ("2016 vcaa", Some(2016), Some("vcaa"), false),
+        ("2019 access solutions", Some(2019), Some("access"), true),
+    ];
+
+    for (title, year, source, solutions) in cases {
+        let m = paper_meta(title);
+        assert_eq!(m.year, year, "{title}");
+        assert_eq!(m.source.as_deref(), source, "{title}");
+        assert_eq!(m.is_solutions, solutions, "{title}");
+    }
+}
+
+/// An examiner's report is answers with commentary, which is the same thing for
+/// the purpose of "show me the answer".
+#[test]
+fn an_examiners_report_counts_as_solutions() {
+    assert!(paper_meta("2018 vcaa nht report").is_solutions);
+}
+
+#[test]
+fn a_title_with_nothing_in_it_yields_nothing_rather_than_a_guess() {
+    let m = paper_meta("Chapter notes");
+    assert_eq!(m.year, None);
+    assert_eq!(m.source, None);
+    assert!(!m.is_solutions);
+}
+
+/// A publisher name inside a longer word is not that publisher.
+#[test]
+fn a_source_must_be_a_whole_word() {
+    assert_eq!(paper_meta("2019 accessed later").source, None);
+    assert_eq!(paper_meta("2019 access exam").source.as_deref(), Some("access"));
+}
+
+#[test]
+fn a_year_is_found_wherever_it_sits_in_the_title() {
+    assert_eq!(paper_meta("Unit 4 2016 exam").year, Some(2016));
+    // A question count or a page number is not a year.
+    assert_eq!(paper_meta("exam 1 of 40").year, None);
+    assert_eq!(paper_meta("9999 something").year, None);
+}
+
+// -- pairing a paper with its answers ----------------------------------------
+
+/// Pairing the wrong solutions to a question is worse than pairing none: you
+/// would revise from the answer to a different question and never notice.
+#[test]
+fn a_paper_finds_its_own_solutions_and_nothing_elses() {
+    let conn = db();
+    add_paper(&conn, 1, "2018 kilbaha exam 1", "past_paper", PAPER);
+    add_paper(&conn, 2, "2018 kilbaha exam 1 solutions", "exam_solution", PAPER);
+    add_paper(&conn, 3, "2018 kilbaha exam 2 solutions", "exam_solution", PAPER);
+
+    let found = solutions_for(&conn, 1).unwrap();
+    assert_eq!(found.unwrap().0, 2, "exam 2's answers are not exam 1's");
+}
+
+#[test]
+fn a_paper_with_no_solutions_in_the_library_pairs_with_nothing() {
+    let conn = db();
+    add_paper(&conn, 1, "2018 kilbaha exam 1", "past_paper", PAPER);
+    add_paper(&conn, 2, "2019 neap exam 1 solutions", "exam_solution", PAPER);
+
+    assert_eq!(solutions_for(&conn, 1).unwrap(), None);
+}
+
+/// A solutions document doesn't have solutions of its own.
+#[test]
+fn the_answers_do_not_pair_with_themselves() {
+    let conn = db();
+    add_paper(&conn, 1, "2018 kilbaha exam 1 solutions", "exam_solution", PAPER);
+    assert_eq!(solutions_for(&conn, 1).unwrap(), None);
+}
+
+/// A longer title that isn't the answers must not be accepted as them.
+#[test]
+fn a_longer_title_is_not_automatically_the_answers() {
+    let conn = db();
+    add_paper(&conn, 1, "2018 kilbaha exam 1", "past_paper", PAPER);
+    add_paper(&conn, 2, "2018 kilbaha exam 1 section b", "past_paper", PAPER);
+
+    assert_eq!(solutions_for(&conn, 1).unwrap(), None);
+}
+
+// -- filtering ---------------------------------------------------------------
+
+fn two_years(conn: &mut Connection) {
+    add_paper(conn, 1, "2014 vcaa exam 1", "past_paper", PAPER);
+    add_paper(conn, 2, "2024 neap exam 1", "past_paper", PAPER);
+    add_paper(conn, 3, "2024 neap exam 1 solutions", "exam_solution", PAPER);
+    for id in 1..=3 {
+        index_resource(conn, id).unwrap();
+    }
+}
+
+#[test]
+fn a_year_range_narrows_to_the_papers_in_it() {
+    let mut conn = db();
+    two_years(&mut conn);
+
+    let recent = Filters { from_year: Some(2020), include_solutions: true, ..Default::default() };
+    let years: Vec<Option<i64>> =
+        search(&conn, "enzyme", &recent, 50).unwrap().iter().map(|q| q.paper.year).collect();
+    assert!(years.iter().all(|y| *y == Some(2024)), "{years:?}");
+
+    let old = Filters { to_year: Some(2015), include_solutions: true, ..Default::default() };
+    assert!(search(&conn, "enzyme", &old, 50)
+        .unwrap()
+        .iter()
+        .all(|q| q.paper.year == Some(2014)));
+}
+
+/// "2014 to 2025" should not quietly include papers with no year in the title.
+#[test]
+fn an_undated_paper_drops_out_once_a_year_bound_is_set() {
+    let mut conn = db();
+    add_paper(&conn, 1, "Some untitled practice", "past_paper", PAPER);
+    index_resource(&mut conn, 1).unwrap();
+
+    let unfiltered = Filters { include_solutions: true, ..Default::default() };
+    assert!(!search(&conn, "enzyme", &unfiltered, 50).unwrap().is_empty());
+
+    let dated = Filters { from_year: Some(2000), include_solutions: true, ..Default::default() };
+    assert!(search(&conn, "enzyme", &dated, 50).unwrap().is_empty());
+}
+
+/// Searching a topic should return the questions on it, not the answers to
+/// them — so solutions are out unless asked for.
+#[test]
+fn solutions_are_excluded_by_default() {
+    let mut conn = db();
+    two_years(&mut conn);
+
+    let default = Filters::default();
+    assert!(search(&conn, "enzyme", &default, 50)
+        .unwrap()
+        .iter()
+        .all(|q| !q.paper.is_solutions));
+
+    let with = Filters { include_solutions: true, ..Default::default() };
+    assert!(search(&conn, "enzyme", &with, 50)
+        .unwrap()
+        .iter()
+        .any(|q| q.paper.is_solutions));
+}
+
+#[test]
+fn a_source_filter_keeps_only_that_publisher() {
+    let mut conn = db();
+    two_years(&mut conn);
+
+    let neap = Filters {
+        source: Some("neap".into()),
+        include_solutions: true,
+        ..Default::default()
+    };
+    let found = search(&conn, "enzyme", &neap, 50).unwrap();
+    assert!(!found.is_empty());
+    assert!(found.iter().all(|q| q.paper.source.as_deref() == Some("neap")));
+}
+
+/// Filtering happens after the SQL, so the limit has to be applied after it
+/// too — otherwise a filtered search returns fewer rows than asked for while
+/// matches sit just past the cut.
+#[test]
+fn the_limit_counts_what_survives_the_filter() {
+    let mut conn = db();
+    two_years(&mut conn);
+
+    let one = Filters { include_solutions: true, ..Default::default() };
+    assert_eq!(search(&conn, "enzyme", &one, 1).unwrap().len(), 1);
 }

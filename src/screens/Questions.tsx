@@ -16,7 +16,7 @@ import { FileText, Loader2, Search, Tag, X } from "lucide-react";
 import { SectionHeader } from "../components/primitives";
 import { Button, Card, cx } from "../components/ui";
 import { api } from "../lib/api";
-import type { PastQuestion } from "../lib/types";
+import type { PastQuestion, QuestionFacets } from "../lib/types";
 import { useApp } from "../store";
 
 export function Questions() {
@@ -25,6 +25,12 @@ export function Questions() {
   const [query, setQuery] = useState("");
   const [subjectId, setSubjectId] = useState<number | null>(null);
   const [tag, setTag] = useState<string | null>(null);
+  const [facets, setFacets] = useState<QuestionFacets | null>(null);
+  const [fromYear, setFromYear] = useState<number | null>(null);
+  const [toYear, setToYear] = useState<number | null>(null);
+  const [source, setSource] = useState<string | null>(null);
+  const [includeSolutions, setIncludeSolutions] = useState(false);
+  const [open, setOpen] = useState<PastQuestion | null>(null);
   const [results, setResults] = useState<PastQuestion[]>([]);
   const [tags, setTags] = useState<[string, number][]>([]);
   const [indexing, setIndexing] = useState(false);
@@ -38,7 +44,18 @@ export function Questions() {
 
   useEffect(() => {
     void loadTags();
-  }, [loadTags]);
+    void api
+      .questionFacets(subjectId)
+      .then((f) => {
+        setFacets(f);
+        // Seed the range from what's actually there. A slider whose ends don't
+        // match the data is a control that looks broken the first time you
+        // touch it.
+        setFromYear(f.minYear);
+        setToYear(f.maxYear);
+      })
+      .catch(() => setFacets(null));
+  }, [loadTags, subjectId]);
 
   // How much is left to index. Costs one query and answers the only question
   // an empty screen raises — is this broken, or have I not built it yet?
@@ -61,7 +78,11 @@ export function Questions() {
     }
     const t = setTimeout(() => {
       void api
-        .searchQuestions(query, subjectId, tag, 60)
+        .searchQuestions(
+          query,
+          { subjectId, tag, fromYear, toYear, source, includeSolutions },
+          60,
+        )
         .then((r) => {
           setResults(r);
           setSearched(true);
@@ -69,7 +90,7 @@ export function Questions() {
         .catch(() => setResults([]));
     }, 160);
     return () => clearTimeout(t);
-  }, [query, subjectId, tag]);
+  }, [query, subjectId, tag, fromYear, toYear, source, includeSolutions]);
 
   /**
    * Work through the backlog in batches.
@@ -174,6 +195,77 @@ export function Questions() {
         </div>
       </Card>
 
+      {facets && facets.minYear !== null && (
+        <Card className="animate-rise mb-4 flex flex-wrap items-center gap-x-5 gap-y-3 p-4">
+          <label className="flex items-center gap-2 text-[12.5px] text-[var(--ink-dim)]">
+            Years
+            <input
+              type="number"
+              value={fromYear ?? ""}
+              min={facets.minYear ?? undefined}
+              max={facets.maxYear ?? undefined}
+              onChange={(e) =>
+                setFromYear(e.target.value ? Number(e.target.value) : null)
+              }
+              className="h-7 w-[68px] rounded-[var(--r-sm)] border border-[var(--line)] bg-[var(--surface-hi)] px-2 text-[12.5px] text-[var(--ink)] outline-none focus:border-[var(--accent)]"
+            />
+            <span className="text-[var(--ink-faint)]">to</span>
+            <input
+              type="number"
+              value={toYear ?? ""}
+              min={facets.minYear ?? undefined}
+              max={facets.maxYear ?? undefined}
+              onChange={(e) =>
+                setToYear(e.target.value ? Number(e.target.value) : null)
+              }
+              className="h-7 w-[68px] rounded-[var(--r-sm)] border border-[var(--line)] bg-[var(--surface-hi)] px-2 text-[12.5px] text-[var(--ink)] outline-none focus:border-[var(--accent)]"
+            />
+          </label>
+
+          {facets.sources.length > 0 && (
+            <label className="flex items-center gap-2 text-[12.5px] text-[var(--ink-dim)]">
+              From
+              <select
+                value={source ?? ""}
+                onChange={(e) => setSource(e.target.value || null)}
+                className="h-7 rounded-[var(--r-sm)] border border-[var(--line)] bg-[var(--surface-hi)] px-2 text-[12.5px] text-[var(--ink)] outline-none"
+              >
+                <option value="">Anyone</option>
+                {facets.sources.map((s) => (
+                  <option key={s} value={s}>
+                    {s.toUpperCase()}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          {/* Off by default: a topic search wants the questions on it, not the
+              answers to them. */}
+          <label className="flex items-center gap-2 text-[12.5px] text-[var(--ink-dim)]">
+            <input
+              type="checkbox"
+              checked={includeSolutions}
+              onChange={(e) => setIncludeSolutions(e.target.checked)}
+            />
+            Include answer books
+          </label>
+
+          <button
+            onClick={() => {
+              setFromYear(facets.minYear);
+              setToYear(facets.maxYear);
+              setSource(null);
+              setIncludeSolutions(false);
+              setTag(null);
+            }}
+            className="pressable ml-auto text-[12px] text-[var(--ink-faint)] hover:text-[var(--ink)]"
+          >
+            Reset
+          </button>
+        </Card>
+      )}
+
       {tags.length > 0 && (
         <section className="animate-rise mb-5">
           <SectionHeader title="Topics" hint="from your own topic names" />
@@ -205,9 +297,16 @@ export function Questions() {
 
       <div className="space-y-2">
         {results.map((q) => (
-          <QuestionCard key={q.id} question={q} onTagsChanged={loadTags} />
+          <QuestionCard
+            key={q.id}
+            question={q}
+            onTagsChanged={loadTags}
+            onOpen={() => setOpen(q)}
+          />
         ))}
       </div>
+
+      {open && <QuestionDetail question={open} onClose={() => setOpen(null)} />}
 
       {!searched && remaining === 0 && total > 0 && (
         <p className="px-1 text-[13.5px] leading-relaxed text-[var(--ink-dim)]">
@@ -256,9 +355,11 @@ function Chip({
 function QuestionCard({
   question,
   onTagsChanged,
+  onOpen,
 }: {
   question: PastQuestion;
   onTagsChanged: () => Promise<void>;
+  onOpen: () => void;
 }) {
   const [tags, setTags] = useState(question.tags);
   const [adding, setAdding] = useState(false);
@@ -285,9 +386,22 @@ function QuestionCard({
         <span className="text-[13px] font-medium text-[var(--ink)]">
           {question.label}
         </span>
-        <span className="min-w-0 truncate text-[11.5px] text-[var(--ink-faint)]">
+        <button
+          onClick={onOpen}
+          className="pressable min-w-0 truncate text-[11.5px] text-[var(--ink-faint)] hover:text-[var(--accent)]"
+        >
           {question.resourceTitle}
-        </span>
+        </button>
+        {question.year !== null && (
+          <span className="shrink-0 rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-[11px] tabular-nums text-[var(--ink-faint)]">
+            {question.year}
+          </span>
+        )}
+        {question.isSolutions && (
+          <span className="shrink-0 rounded-full bg-[var(--warn)]/15 px-2 py-0.5 text-[11px] text-[var(--warn)]">
+            answer book
+          </span>
+        )}
         {question.subjectName && (
           <span className="shrink-0 text-[11.5px] text-[var(--ink-faint)]">
             · {question.subjectName}
@@ -363,5 +477,79 @@ function QuestionCard({
         )}
       </div>
     </Card>
+  );
+}
+
+/**
+ * One question, with its answers if the library has them.
+ *
+ * Pairing is exact — `2018 kilbaha exam 1` finds `2018 kilbaha exam 1
+ * solutions` and nothing else. Fuzzy matching here would eventually show you
+ * the answer to a different question, which you would revise from and never
+ * notice.
+ */
+function QuestionDetail({
+  question,
+  onClose,
+}: {
+  question: PastQuestion;
+  onClose: () => void;
+}) {
+  const [solutions, setSolutions] = useState<[number, string] | null>(null);
+  const [checked, setChecked] = useState(false);
+
+  useEffect(() => {
+    void api
+      .questionSolutions(question.resourceId)
+      .then(setSolutions)
+      .catch(() => setSolutions(null))
+      .finally(() => setChecked(true));
+  }, [question.resourceId]);
+
+  return (
+    <div
+      className="fixed inset-0 z-30 flex items-start justify-center overflow-y-auto bg-black/45 p-8 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <Card
+        className="animate-rise w-full max-w-[760px] p-6"
+        onClick={(e: React.MouseEvent) => e.stopPropagation()}
+      >
+        <div className="flex flex-wrap items-baseline gap-2">
+          <h2 className="text-[16px] font-semibold tracking-[-0.01em]">
+            {question.label}
+          </h2>
+          <span className="text-[12.5px] text-[var(--ink-dim)]">
+            {question.resourceTitle}
+          </span>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="pressable ml-auto rounded-full p-1 text-[var(--ink-faint)] hover:text-[var(--ink)]"
+          >
+            <X size={14} />
+          </button>
+        </div>
+
+        <p className="selectable mt-4 whitespace-pre-wrap text-[13.5px] leading-relaxed text-[var(--ink)]">
+          {question.text}
+        </p>
+
+        <div className="mt-5 border-t border-[var(--line-soft)] pt-4">
+          {!checked ? null : solutions ? (
+            <p className="text-[12.5px] leading-relaxed text-[var(--ink-dim)]">
+              Answers are in{" "}
+              <span className="text-[var(--ink)]">{solutions[1]}</span>. Open it
+              from the Library — Retain stores the text, not the original PDF,
+              so the marking scheme's layout isn't reproduced here.
+            </p>
+          ) : (
+            <p className="text-[12.5px] leading-relaxed text-[var(--ink-faint)]">
+              No answer book for this paper is in your library.
+            </p>
+          )}
+        </div>
+      </Card>
+    </div>
   );
 }

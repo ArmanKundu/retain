@@ -1034,6 +1034,26 @@ export interface PastQuestion {
   words: number;
   text: string;
   tags: string[];
+  /** Read from the paper's title, which is where all of this actually lives. */
+  year: number | null;
+  source: string | null;
+  isSolutions: boolean;
+}
+
+export interface QuestionFilters {
+  subjectId: number | null;
+  tag: string | null;
+  fromYear: number | null;
+  toYear: number | null;
+  source: string | null;
+  /** Answers are excluded unless asked for — a topic search wants questions. */
+  includeSolutions: boolean;
+}
+
+export interface QuestionFacets {
+  minYear: number | null;
+  maxYear: number | null;
+  sources: string[];
 }
 
 export interface IndexProgress {

@@ -93,6 +93,8 @@ import type {
   PastQuestion,
   IndexProgress,
   CardRow,
+  QuestionFilters,
+  QuestionFacets,
 } from "./types";
 
 export const api = {
@@ -576,18 +578,18 @@ export const api = {
     invoke<void>("set_sticky_colour", { noteId, colour }),
 
   // -- past questions -------------------------------------------------------
-  searchQuestions: (
-    query: string,
-    subjectId: number | null,
-    tag: string | null,
-    limit?: number,
-  ) =>
+  searchQuestions: (query: string, filters: QuestionFilters, limit?: number) =>
     invoke<PastQuestion[]>("search_questions", {
       query,
-      subjectId,
-      tag,
+      filters,
       limit: limit ?? null,
     }),
+  /** The years and publishers actually present, so no filter is a dead control. */
+  questionFacets: (subjectId: number | null) =>
+    invoke<QuestionFacets>("question_facets", { subjectId }),
+  /** The solutions document for a question's paper, if the library has one. */
+  questionSolutions: (resourceId: number) =>
+    invoke<[number, string] | null>("question_solutions", { resourceId }),
   questionTags: (subjectId: number | null) =>
     invoke<[string, number][]>("question_tags", { subjectId }),
   tagQuestion: (questionId: number, tag: string) =>

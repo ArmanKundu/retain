@@ -2943,17 +2943,73 @@ pub fn tray_new_sticky(app: &AppHandle) {
 pub fn search_questions(
     state: State<'_, AppState>,
     query: String,
-    subject_id: Option<i64>,
-    tag: Option<String>,
+    filters: questions::Filters,
     limit: Option<i64>,
 ) -> CmdResult<Vec<questions::Question>> {
     Ok(questions::search(
         &db(&state),
         &query,
-        subject_id,
-        tag.as_deref(),
+        &filters,
         limit.unwrap_or(50).clamp(1, 200),
     )?)
+}
+
+/// The solutions document for a question's paper, if the library has one.
+#[tauri::command]
+pub fn question_solutions(
+    state: State<'_, AppState>,
+    resource_id: i64,
+) -> CmdResult<Option<(i64, String)>> {
+    Ok(questions::solutions_for(&db(&state), resource_id)?)
+}
+
+/// The years and publishers present in the indexed questions.
+///
+/// Read from the titles rather than stored, so the filter offers exactly what
+/// is actually there — a year range with nothing in it is a dead control.
+#[tauri::command]
+pub fn question_facets(
+    state: State<'_, AppState>,
+    subject_id: Option<i64>,
+) -> CmdResult<QuestionFacets> {
+    let conn = db(&state);
+    let mut stmt = conn.prepare(
+        "SELECT DISTINCT r.title FROM questions q JOIN resources r ON r.id = q.resource_id
+          WHERE (?1 IS NULL OR q.subject_id = ?1)",
+    )?;
+    let titles: Vec<String> = stmt
+        .query_map([subject_id], |r| r.get(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let mut years: Vec<i64> = Vec::new();
+    let mut sources: Vec<String> = Vec::new();
+    for t in &titles {
+        let m = questions::paper_meta(t);
+        if let Some(y) = m.year {
+            years.push(y);
+        }
+        if let Some(s) = m.source {
+            sources.push(s);
+        }
+    }
+    years.sort_unstable();
+    years.dedup();
+    sources.sort();
+    sources.dedup();
+
+    Ok(QuestionFacets {
+        min_year: years.first().copied(),
+        max_year: years.last().copied(),
+        sources,
+    })
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuestionFacets {
+    pub min_year: Option<i64>,
+    pub max_year: Option<i64>,
+    pub sources: Vec<String>,
 }
 
 #[tauri::command]

@@ -317,3 +317,74 @@ fn an_image_block_that_lost_its_data_says_so_rather_than_rendering_broken() {
 
     assert!(to_markdown(&get(&conn, id).unwrap()).contains("image missing"));
 }
+
+// -- stickies ---------------------------------------------------------------
+
+/// Closing a sticky must keep where it was. Reopening one you closed yesterday
+/// should put it back, not in the middle of the screen.
+#[test]
+fn closing_a_sticky_keeps_its_position() {
+    let conn = db();
+    let id = create(&conn, None, "Homework", None, now()).unwrap();
+
+    set_sticky_open(&conn, id, true).unwrap();
+    set_sticky_geometry(&conn, id, 1200.0, 340.0, 300.0, 260.0).unwrap();
+    set_sticky_open(&conn, id, false).unwrap();
+
+    let s = sticky(&conn, id).unwrap();
+    assert_eq!(s.x, Some(1200.0));
+    assert_eq!(s.y, Some(340.0));
+    assert!(open_stickies(&conn).unwrap().is_empty(), "closed, but not forgotten");
+
+    set_sticky_open(&conn, id, true).unwrap();
+    assert_eq!(open_stickies(&conn).unwrap()[0].x, Some(1200.0));
+}
+
+#[test]
+fn a_new_note_is_not_a_sticky_until_it_is_put_on_the_desktop() {
+    let conn = db();
+    create(&conn, None, "Just a note", None, now()).unwrap();
+
+    assert!(open_stickies(&conn).unwrap().is_empty());
+}
+
+#[test]
+fn only_the_paper_colours_are_accepted() {
+    let conn = db();
+    let id = create(&conn, None, "N", None, now()).unwrap();
+
+    assert_eq!(sticky(&conn, id).unwrap().colour, "amber", "a default, not empty");
+
+    set_sticky_colour(&conn, id, "mint").unwrap();
+    assert_eq!(sticky(&conn, id).unwrap().colour, "mint");
+
+    // An arbitrary string would reach a CSS class name.
+    assert!(set_sticky_colour(&conn, id, "#ff0000").is_err());
+    assert!(set_sticky_colour(&conn, id, "puce").is_err());
+    assert_eq!(sticky(&conn, id).unwrap().colour, "mint", "unchanged after a refusal");
+}
+
+/// A sticky is a note, so it keeps working like one — it has blocks, it is in
+/// the notes list, and it exports as Markdown.
+#[test]
+fn a_sticky_is_still_an_ordinary_note() {
+    let conn = db();
+    let id = create(&conn, Some(1), "Ask Mr B", None, now()).unwrap();
+    set_sticky_open(&conn, id, true).unwrap();
+
+    let first = get(&conn, id).unwrap().blocks[0].id;
+    update_block(&conn, first, "todo", "Ask about Q4b", false, None, now()).unwrap();
+
+    assert_eq!(list(&conn, None, 10).unwrap().len(), 1, "still in the notes list");
+    assert!(to_markdown(&get(&conn, id).unwrap()).contains("- [ ] Ask about Q4b"));
+}
+
+#[test]
+fn deleting_a_sticky_takes_it_off_the_desktop() {
+    let conn = db();
+    let id = create(&conn, None, "Temp", None, now()).unwrap();
+    set_sticky_open(&conn, id, true).unwrap();
+
+    delete(&conn, id).unwrap();
+    assert!(open_stickies(&conn).unwrap().is_empty());
+}

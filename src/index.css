@@ -776,3 +776,29 @@ textarea:focus-visible,
     transition-duration: 1ms;
   }
 }
+
+/* Sticky paper --------------------------------------------------------------
+
+   Defined once, outside the theme blocks, and deliberately never redefined for
+   dark mode. A sticky sits on your wallpaper rather than inside the app: it is
+   paper, and paper doesn't turn dark at night. Following the theme would make
+   the notes vanish into a dark desktop, which is the one thing a sticky must
+   never do.
+
+   Each colour carries its own ink, because a fixed ink can't stay legible
+   across six papers. */
+
+:root {
+  --paper-amber: 252 228 160;
+  --paper-amber-ink: 58 47 18;
+  --paper-rose: 250 205 205;
+  --paper-rose-ink: 63 31 31;
+  --paper-mint: 198 238 213;
+  --paper-mint-ink: 18 48 35;
+  --paper-sky: 198 224 250;
+  --paper-sky-ink: 18 36 56;
+  --paper-lilac: 219 209 250;
+  --paper-lilac-ink: 36 29 61;
+  --paper-slate: 226 229 233;
+  --paper-slate-ink: 29 33 39;
+}

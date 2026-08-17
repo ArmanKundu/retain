@@ -89,6 +89,7 @@ import type {
   Note,
   NoteSummary,
   NoteBlockKind,
+  StickyNote,
 } from "./types";
 
 export const api = {
@@ -554,6 +555,22 @@ export const api = {
     invoke<void>("move_note_block", { blockId, delta }),
   deleteNote: (id: number) => invoke<void>("delete_note", { id }),
   noteMarkdown: (id: number) => invoke<string>("note_markdown", { id }),
+
+  // -- stickies -------------------------------------------------------------
+  openSticky: (noteId: number) => invoke<void>("open_sticky", { noteId }),
+  /** Takes it off the desktop. The note and its position both survive. */
+  closeSticky: (noteId: number) => invoke<void>("close_sticky", { noteId }),
+  newSticky: () => invoke<number>("new_sticky"),
+  getSticky: (noteId: number) => invoke<StickyNote>("get_sticky", { noteId }),
+  saveStickyGeometry: (
+    noteId: number,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+  ) => invoke<void>("save_sticky_geometry", { noteId, x, y, w, h }),
+  setStickyColour: (noteId: number, colour: string) =>
+    invoke<void>("set_sticky_colour", { noteId, colour }),
   conversationMarkdown: (conversationId: number) =>
     invoke<string>("conversation_markdown", { conversationId }),
 

@@ -17,7 +17,12 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 # `tray-icon` is the feature that gives us the macOS menu bar item. It is part of
 # Tauri core, NOT a separate plugin — the menu bar timer needs no extra crate.
-tauri = { version = "2", features = ["tray-icon"] }
+# `macos-private-api` is what makes `"transparent": true` actually take
+# effect — the capture bar and the sticky notes are both undecorated
+# windows that draw their own rounded shape, and without it macOS paints
+# an opaque square behind them. It rules out the Mac App Store, which
+# Retain was never going to use: it ships as an unsigned DMG.
+tauri = { version = "2", features = ["tray-icon", "macos-private-api"] }
 
 # Opens URLs in the user's default browser (release notes, VCAA links).
 tauri-plugin-opener = "2"

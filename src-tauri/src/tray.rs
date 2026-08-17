@@ -69,6 +69,7 @@ pub fn build(app: &AppHandle) -> anyhow::Result<TrayHandles> {
     let status = MenuItem::with_id(app, "status", "No session running", false, None::<&str>)?;
     let pause_resume = MenuItem::with_id(app, "pause_resume", "Pause", false, None::<&str>)?;
     let stop = MenuItem::with_id(app, "stop", "Stop session", false, None::<&str>)?;
+    let sticky = MenuItem::with_id(app, "sticky", "New sticky note", true, None::<&str>)?;
     let open = MenuItem::with_id(app, "open", "Open Retain", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit Retain", true, None::<&str>)?;
 
@@ -80,6 +81,7 @@ pub fn build(app: &AppHandle) -> anyhow::Result<TrayHandles> {
             &pause_resume,
             &stop,
             &PredefinedMenuItem::separator(app)?,
+            &sticky,
             &open,
             &quit,
         ],
@@ -96,6 +98,7 @@ pub fn build(app: &AppHandle) -> anyhow::Result<TrayHandles> {
             let app = app.clone();
             match event.id().as_ref() {
                 "open" => show_main_window(&app),
+                "sticky" => crate::commands::tray_new_sticky(&app),
                 "quit" => app.exit(0),
                 "pause_resume" => crate::commands::tray_toggle_pause(&app),
                 "stop" => crate::commands::tray_stop(&app),

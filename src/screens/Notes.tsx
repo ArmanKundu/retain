@@ -22,6 +22,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Camera,
+  StickyNote,
   ChevronDown,
   FileText,
   GripVertical,
@@ -30,6 +31,7 @@ import {
   Trash2,
 } from "lucide-react";
 
+import { InlineText } from "../components/InlineText";
 import { SectionHeader } from "../components/primitives";
 import { Button, Card, cx } from "../components/ui";
 import { api } from "../lib/api";
@@ -374,6 +376,15 @@ function Editor({
           </select>
 
           <button
+            onClick={() => void api.openSticky(note.id)}
+            title="Put this note on the desktop, above everything else"
+            className="pressable flex items-center gap-1.5 rounded-full border border-[var(--line)] px-2.5 py-1 text-[12px] text-[var(--ink-dim)] hover:text-[var(--ink)]"
+          >
+            <StickyNote size={12} />
+            Stick to desktop
+          </button>
+
+          <button
             onClick={() =>
               void insertScreenshot(blocks[blocks.length - 1]?.id ?? null)
             }
@@ -472,6 +483,53 @@ function Editor({
   );
 }
 
+/**
+ * A block that isn't being edited, drawn with its formatting.
+ *
+ * This is the half that makes inline markdown possible without
+ * contenteditable: the textarea only exists while the cursor is in the block,
+ * so you see `**enzyme**` on the line you're editing and **enzyme** on every
+ * other one. Clicking anywhere in it puts the cursor back where you clicked —
+ * anything less and it reads as a preview you have to escape from.
+ */
+function Rendered({
+  block,
+  className,
+  placeholder,
+  onFocus,
+}: {
+  block: NoteBlock;
+  className: string;
+  placeholder?: string;
+  onFocus: () => void;
+}) {
+  return (
+    <div
+      onMouseDown={(e) => {
+        // A link handles its own click; focusing the editor instead would open
+        // the textarea and swallow it.
+        if ((e.target as HTMLElement).closest("a")) return;
+        e.preventDefault();
+        onFocus();
+      }}
+      className={cx(
+        "w-full cursor-text whitespace-pre-wrap break-words",
+        className,
+      )}
+    >
+      {block.text ? (
+        <InlineText source={block.text} />
+      ) : (
+        // A zero-height empty block would be unclickable, so an empty one keeps
+        // a line's worth of space and offers the hint on the first block.
+        <span className="text-[var(--ink-faint)]">
+          {placeholder || "\u00a0"}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function BlockRow({
   block,
   index,
@@ -500,6 +558,7 @@ function BlockRow({
   onFocusSibling: (dir: -1 | 1) => void;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
+  const [editing, setEditing] = useState(false);
 
   // Grow to fit. A scrollbar inside one block of a document is wrong — the page
   // scrolls, the block doesn't.
@@ -574,9 +633,39 @@ function BlockRow({
       )}
 
       <div className="min-w-0 flex-1">
+        {/* Formatted when you're not in it, raw when you are. The textarea is
+            unmounted while blurred, which is what lets inline markdown work
+            without contenteditable. */}
+        {!editing && (
+          <Rendered
+            block={block}
+            className={style}
+            placeholder={
+              index === 0 ? "Start writing, or press / for blocks" : undefined
+            }
+            onFocus={() => {
+              setEditing(true);
+              // The textarea doesn't exist yet, so focus waits for the paint
+              // that mounts it.
+              requestAnimationFrame(() => {
+                const el = ref.current;
+                if (!el) return;
+                el.focus();
+                el.setSelectionRange(el.value.length, el.value.length);
+              });
+            }}
+          />
+        )}
+
         <textarea
           ref={ref}
           data-block={block.id}
+          // `sr-only` rather than `hidden`: a hidden element can't be focused,
+          // and the editor focuses blocks programmatically after every insert,
+          // delete and arrow-key move. This keeps the textarea in the
+          // focus order while the rendered view supplies the row's height.
+          onFocus={() => setEditing(true)}
+          onBlur={() => setEditing(false)}
           value={block.text}
           rows={1}
           spellCheck
@@ -683,9 +772,10 @@ function BlockRow({
             }
           }}
           className={cx(
-            "w-full resize-none overflow-hidden bg-transparent outline-none",
-            "placeholder:text-[var(--ink-faint)]",
-            style,
+            editing
+              ? "w-full resize-none overflow-hidden bg-transparent outline-none placeholder:text-[var(--ink-faint)]"
+              : "sr-only",
+            editing && style,
           )}
         />
 

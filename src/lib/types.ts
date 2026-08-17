@@ -1010,3 +1010,14 @@ export interface Note {
   blocks: NoteBlock[];
   updatedAt: string;
 }
+
+/** Where a sticky sits on the desktop, and what colour its paper is. */
+export interface StickyNote {
+  noteId: number;
+  title: string;
+  colour: string;
+  x: number | null;
+  y: number | null;
+  w: number | null;
+  h: number | null;
+}

@@ -4,6 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import App from "./App";
 import { Capture } from "./screens/Capture";
+import { Sticky } from "./screens/Sticky";
 import "./index.css";
 
 /**
@@ -11,7 +12,14 @@ import "./index.css";
  * window that must not mount the whole app — booting the sidebar, store and
  * routing behind a hotkey would cost exactly the latency capture can't afford.
  */
-const isCapture = getCurrentWindow().label === "capture";
+const label = getCurrentWindow().label;
+const isCapture = label === "capture";
+
+// Sticky windows are labelled `sticky-<note id>`, so the window itself carries
+// which note it is showing — nothing has to be passed in or looked up.
+const stickyId = label.startsWith("sticky-")
+  ? Number(label.slice("sticky-".length))
+  : null;
 
 // The capture window is created `transparent: true`, but `html` and `body` both
 // paint `--canvas` — so the "transparent" window rendered as an opaque black
@@ -22,7 +30,17 @@ const isCapture = getCurrentWindow().label === "capture";
 // Set before render so the first paint is already correct — doing it in an
 // effect shows one frame of the black box.
 if (isCapture) document.documentElement.dataset.window = "capture";
+// Stickies are transparent windows too, so the same background rule applies.
+if (stickyId !== null) document.documentElement.dataset.window = "capture";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>{isCapture ? <Capture /> : <App />}</React.StrictMode>,
+  <React.StrictMode>
+    {isCapture ? (
+      <Capture />
+    ) : stickyId !== null ? (
+      <Sticky noteId={stickyId} />
+    ) : (
+      <App />
+    )}
+  </React.StrictMode>,
 );

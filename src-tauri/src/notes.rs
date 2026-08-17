@@ -476,6 +476,106 @@ pub fn to_markdown(note: &Note) -> String {
     out
 }
 
+// ---------------------------------------------------------------------------
+// Stickies
+// ---------------------------------------------------------------------------
+
+/// The paper colours a sticky can be.
+///
+/// Deliberately not the subject palette. A sticky is found by where it is on
+/// your screen and what colour it is — "the yellow one by the dock" — and
+/// reusing subject colours would make two stickies for the same subject
+/// indistinguishable.
+pub const STICKY_COLOURS: [&str; 6] = ["amber", "rose", "mint", "sky", "lilac", "slate"];
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Sticky {
+    pub note_id: i64,
+    pub title: String,
+    pub colour: String,
+    pub x: Option<f64>,
+    pub y: Option<f64>,
+    pub w: Option<f64>,
+    pub h: Option<f64>,
+}
+
+fn sticky_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Sticky> {
+    Ok(Sticky {
+        note_id: r.get(0)?,
+        title: r.get(1)?,
+        colour: r.get(2)?,
+        x: r.get(3)?,
+        y: r.get(4)?,
+        w: r.get(5)?,
+        h: r.get(6)?,
+    })
+}
+
+/// Every sticky that should be on screen right now.
+pub fn open_stickies(conn: &Connection) -> Result<Vec<Sticky>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, title, sticky_colour, sticky_x, sticky_y, sticky_w, sticky_h
+           FROM notes WHERE sticky_open = 1 AND archived = 0 ORDER BY id",
+    )?;
+    let rows = stmt.query_map([], sticky_row)?.collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+pub fn sticky(conn: &Connection, note_id: i64) -> Result<Sticky> {
+    let mut stmt = conn.prepare(
+        "SELECT id, title, sticky_colour, sticky_x, sticky_y, sticky_w, sticky_h
+           FROM notes WHERE id = ?1",
+    )?;
+    stmt.query_row([note_id], sticky_row)
+        .optional()?
+        .ok_or_else(|| anyhow!("That note no longer exists."))
+}
+
+/// Put a note on the desktop, or take it off.
+///
+/// Closing keeps the geometry. Reopening a sticky you closed yesterday should
+/// put it back where it was, not in the middle of the screen.
+pub fn set_sticky_open(conn: &Connection, note_id: i64, open: bool) -> Result<()> {
+    conn.execute(
+        "UPDATE notes SET sticky_open = ?2 WHERE id = ?1",
+        rusqlite::params![note_id, open as i64],
+    )?;
+    Ok(())
+}
+
+/// Remember where the window ended up.
+///
+/// Called on move and resize rather than on close, because a sticky is usually
+/// still on screen when the app quits — waiting for a close event would lose
+/// every position on every restart.
+pub fn set_sticky_geometry(
+    conn: &Connection,
+    note_id: i64,
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+) -> Result<()> {
+    conn.execute(
+        "UPDATE notes SET sticky_x = ?2, sticky_y = ?3, sticky_w = ?4, sticky_h = ?5
+          WHERE id = ?1",
+        rusqlite::params![note_id, x, y, w, h],
+    )?;
+    Ok(())
+}
+
+pub fn set_sticky_colour(conn: &Connection, note_id: i64, colour: &str) -> Result<()> {
+    if !STICKY_COLOURS.contains(&colour) {
+        return Err(anyhow!("\"{colour}\" isn't a sticky colour."));
+    }
+    conn.execute(
+        "UPDATE notes SET sticky_colour = ?2 WHERE id = ?1",
+        rusqlite::params![note_id, colour],
+    )?;
+    Ok(())
+}
+
 #[cfg(test)]
 #[path = "notes/tests.rs"]
 mod tests;

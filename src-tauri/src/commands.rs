@@ -2770,3 +2770,140 @@ pub fn note_markdown(state: State<'_, AppState>, id: i64) -> CmdResult<String> {
     let conn = db(&state);
     Ok(notes::to_markdown(&notes::get(&conn, id)?))
 }
+
+// ---------------------------------------------------------------------------
+// Sticky notes on the desktop
+// ---------------------------------------------------------------------------
+
+/// Build the floating window for one sticky.
+///
+/// Separate from the command so launch can restore several without going
+/// through the frontend — the stickies have to be back on screen before any UI
+/// exists to ask for them.
+pub fn spawn_sticky(app: &AppHandle, s: &notes::Sticky) -> Result<(), String> {
+    let label = format!("sticky-{}", s.note_id);
+
+    // Already up. Focus it rather than making a second window for one note,
+    // which would give you two editors writing to the same blocks.
+    if let Some(existing) = app.get_webview_window(&label) {
+        let _ = existing.show();
+        let _ = existing.set_focus();
+        return Ok(());
+    }
+
+    let mut builder = tauri::WebviewWindowBuilder::new(
+        app,
+        &label,
+        tauri::WebviewUrl::App("index.html".into()),
+    )
+    .title(&s.title)
+    .inner_size(s.w.unwrap_or(300.0), s.h.unwrap_or(240.0))
+    .min_inner_size(200.0, 140.0)
+    .decorations(false)
+    .transparent(true)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .shadow(false)
+    // Follows you between Spaces. A sticky that only exists on the desktop you
+    // created it on is a sticky you will not see again.
+    .visible_on_all_workspaces(true);
+
+    builder = match (s.x, s.y) {
+        (Some(x), Some(y)) => builder.position(x, y),
+        // No remembered position: offset each new one so they don't stack
+        // exactly on top of each other and look like a single note.
+        _ => builder.position(80.0 + (s.note_id % 7) as f64 * 26.0, 90.0 + (s.note_id % 7) as f64 * 22.0),
+    };
+
+    builder.build().map_err(|e: tauri::Error| e.to_string())?;
+    Ok(())
+}
+
+/// Put a note on the desktop.
+#[tauri::command]
+pub fn open_sticky(state: State<'_, AppState>, app: AppHandle, note_id: i64) -> CmdResult<()> {
+    let sticky = {
+        let conn = db(&state);
+        notes::set_sticky_open(&conn, note_id, true)?;
+        notes::sticky(&conn, note_id)?
+    };
+    spawn_sticky(&app, &sticky).map_err(CommandError)?;
+    Ok(())
+}
+
+/// Take it off the desktop. The note and its position both survive.
+#[tauri::command]
+pub fn close_sticky(state: State<'_, AppState>, app: AppHandle, note_id: i64) -> CmdResult<()> {
+    {
+        let conn = db(&state);
+        notes::set_sticky_open(&conn, note_id, false)?;
+    }
+    if let Some(window) = app.get_webview_window(&format!("sticky-{note_id}")) {
+        let _ = window.close();
+    }
+    Ok(())
+}
+
+/// Start a sticky from nothing — the tray's "New sticky note".
+#[tauri::command]
+pub fn new_sticky(state: State<'_, AppState>, app: AppHandle) -> CmdResult<i64> {
+    let (id, sticky) = {
+        let conn = db(&state);
+        let id = notes::create(&conn, None, "", None, chrono::Utc::now())?;
+        notes::set_sticky_open(&conn, id, true)?;
+        (id, notes::sticky(&conn, id)?)
+    };
+    spawn_sticky(&app, &sticky).map_err(CommandError)?;
+    Ok(id)
+}
+
+#[tauri::command]
+pub fn save_sticky_geometry(
+    state: State<'_, AppState>,
+    note_id: i64,
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+) -> CmdResult<()> {
+    Ok(notes::set_sticky_geometry(&db(&state), note_id, x, y, w, h)?)
+}
+
+#[tauri::command]
+pub fn set_sticky_colour(
+    state: State<'_, AppState>,
+    note_id: i64,
+    colour: String,
+) -> CmdResult<()> {
+    Ok(notes::set_sticky_colour(&db(&state), note_id, &colour)?)
+}
+
+#[tauri::command]
+pub fn get_sticky(state: State<'_, AppState>, note_id: i64) -> CmdResult<notes::Sticky> {
+    Ok(notes::sticky(&db(&state), note_id)?)
+}
+
+/// The tray's "New sticky note".
+///
+/// The tray handler has an `AppHandle` and no `State`, so it resolves the state
+/// itself rather than duplicating the command.
+pub fn tray_new_sticky(app: &AppHandle) {
+    let sticky = {
+        let state: State<'_, AppState> = app.state();
+        let conn = state.db.lock().expect("database mutex poisoned");
+        match notes::create(&conn, None, "", None, chrono::Utc::now())
+            .and_then(|id| notes::set_sticky_open(&conn, id, true).map(|()| id))
+            .and_then(|id| notes::sticky(&conn, id))
+        {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[retain] couldn't make a sticky: {e}");
+                return;
+            }
+        }
+    };
+
+    if let Err(e) = spawn_sticky(app, &sticky) {
+        eprintln!("[retain] couldn't open the sticky: {e}");
+    }
+}

@@ -455,7 +455,33 @@ pub fn classify_http(status: u16, provider: Provider, model: &str) -> AiUnavaila
         // Names the model. Saying "change it in Settings" without saying which
         // model failed is what made the original report so hard to act on.
         404 => format!("{name} has no model called \"{model}\"."),
+        // Payment Required, and it means exactly that. Verified against the
+        // live API: an invalid key returns 401, so a 402 says the key is good
+        // and the account is out of credit. Reporting it as a bare number sent
+        // people to check their key, which was the one thing not wrong.
+        402 => match provider {
+            Provider::OpenRouter => {
+                "Your OpenRouter account is out of credit. Top it up at \
+                 openrouter.ai/credits — the key itself is fine."
+                    .to_string()
+            }
+            _ => format!("{name} says the account has no credit or billing isn't set up."),
+        },
+        // OpenRouter passes the upstream provider's timeout through rather than
+        // failing itself, so this is not the same as the client timing out.
+        408 => format!("{name} timed out waiting for the model. Try again."),
         429 => format!("{name} is rate-limiting or the quota is used up. Try again later."),
+        // OpenRouter *only*. It routes to upstream providers, so its 502/503
+        // mean "this model is unavailable" rather than "OpenRouter is down" —
+        // picking another model fixes it and waiting doesn't. Everywhere else
+        // these are ordinary outages, and telling someone to switch models
+        // during a Gemini outage is advice that wastes their time.
+        502 if provider == Provider::OpenRouter => {
+            format!("The provider behind \"{model}\" failed. Try another model.")
+        }
+        503 if provider == Provider::OpenRouter => {
+            format!("No provider on {name} can serve \"{model}\" right now. Try another model.")
+        }
         500..=599 => format!("{name} is having trouble ({status}). Not your end — try again later."),
         other => format!("{name} returned an error ({other})."),
     })
@@ -1216,6 +1242,45 @@ mod tests {
         // It is handed a status code and a model name, and nothing else.
         assert!(!classifier.contains("text"), "the classifier must not see the body");
         assert!(!classifier.contains("body"));
+    }
+
+
+    /// 402 is Payment Required and used to fall through to "returned an error
+    /// (402)", which sent people to re-check a key that was working — an
+    /// invalid key returns 401, confirmed against the live API.
+    #[test]
+    fn a_credit_problem_is_not_reported_as_a_key_problem() {
+        let out = classify_http(402, Provider::OpenRouter, "anthropic/claude-opus-5").0;
+
+        assert!(out.contains("out of credit"), "{out}");
+        assert!(out.contains("openrouter.ai/credits"), "the fix is named: {out}");
+        assert!(out.contains("key itself is fine"), "{out}");
+        assert!(!out.contains("(402)"), "a bare status code is not an explanation");
+    }
+
+    /// On OpenRouter a 503 means "this model is unavailable" — it routes to
+    /// upstream providers. On a first-party API the same code is an outage, and
+    /// telling someone to switch models during one wastes their time.
+    #[test]
+    fn an_unavailable_model_is_distinguished_from_an_outage() {
+        let routed = classify_http(503, Provider::OpenRouter, "some/model").0;
+        assert!(routed.contains("Try another model"), "{routed}");
+
+        let direct = classify_http(503, Provider::Gemini, "gemini-flash-latest").0;
+        assert!(direct.contains("Not your end"), "{direct}");
+        assert!(!direct.contains("Try another model"), "wrong advice: {direct}");
+
+        // Even on OpenRouter, a 500 is OpenRouter's own problem — wait.
+        let outage = classify_http(500, Provider::OpenRouter, "some/model").0;
+        assert!(outage.contains("Not your end"), "{outage}");
+    }
+
+    /// The classifier still never sees a response body — a provider error can
+    /// quote the request it received, and that request carried the key.
+    #[test]
+    fn the_new_branches_still_only_use_the_status_and_the_model() {
+        let with_model = classify_http(503, Provider::OpenRouter, "vendor/thing").0;
+        assert!(with_model.contains("vendor/thing"));
     }
 
     /// The model list must survive the shapes the real API returns.

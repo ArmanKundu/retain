@@ -135,6 +135,23 @@ pub fn run() {
             // `manage` hands ownership to Tauri, which passes it to every command.
             app.manage(state);
 
+            // ---- Stickies -------------------------------------------------
+            // Restored before anything else asks for them: a sticky is meant to
+            // be on the desktop, and one that only reappears after you open the
+            // main window is a reminder you have already missed.
+            {
+                let stickies = {
+                    let state: tauri::State<'_, AppState> = handle.state();
+                    let conn = state.db.lock().expect("database mutex poisoned");
+                    notes::open_stickies(&conn).unwrap_or_default()
+                };
+                for s in &stickies {
+                    if let Err(e) = commands::spawn_sticky(&handle, s) {
+                        eprintln!("[retain] couldn't restore a sticky: {e}");
+                    }
+                }
+            }
+
             // ---- Quick capture --------------------------------------------
             if let Err(e) = register_capture_shortcut(&handle) {
                 // A hotkey clash must not stop the app booting — capture is one
@@ -271,6 +288,12 @@ pub fn run() {
             commands::move_note_block,
             commands::delete_note,
             commands::note_markdown,
+            commands::open_sticky,
+            commands::close_sticky,
+            commands::new_sticky,
+            commands::save_sticky_geometry,
+            commands::set_sticky_colour,
+            commands::get_sticky,
             commands::preview_intervals,
             // Resources and the saved-output library.
             commands::list_resources,
